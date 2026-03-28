@@ -1,0 +1,36 @@
+<!-- templates/chat.html -->
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Чат-помощник</title>
+    <link rel="stylesheet" href="/static/chat.css?v=11" />
+  </head>
+  <body>
+    <div class="ws-root">
+      <div class="ws-header">
+        <div class="ws-title">Помощник</div>
+        <button class="ws-close" id="wsCloseBtn" type="button" aria-label="Закрыть">×</button>
+      </div>
+
+      <div class="ws-messages" id="wsMessages"></div>
+
+      <div class="ws-inputbar">
+        <input
+          id="wsInput"
+          class="ws-input"
+          type="text"
+          placeholder="Напишите, что вы ищете…"
+          autocomplete="off"
+        />
+        <button id="wsSend" class="ws-send" type="button">Отправить</button>
+      </div>
+    </div>
+
+    <script>
+      window.__WIDGET_KEY__ = "{{ widget_key }}";
+    </script>
+    <script src="/static/chat.js?v=11"></script>
+  </body>
+</html>

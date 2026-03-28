@@ -1,0 +1,653 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>СтройМаркет - Строительные материалы и инструменты</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🏗️%3C/text%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="/examples/demo/styles.css" />
+    <style>
+      /* Убеждаемся, что корзина не конфликтует с виджетом */
+      .cart-modal {
+        z-index: 9999;
+      }
+
+      /* Виджет обычно имеет z-index около 10000, поэтому корзина будет ниже */
+      iframe[src*="chat"] {
+        z-index: 10000 !important;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Header -->
+    <header class="header">
+      <div class="header-top">
+        🎉 Акция! Скидка 15% на все обои до конца месяца
+      </div>
+      <div class="header-main">
+        <div class="logo">
+          <span class="logo-icon">🏗️</span>
+          <span>СтройМаркет</span>
+        </div>
+        <nav>
+          <ul class="nav">
+            <li><a href="#categories">Каталог</a></li>
+            <li><a href="#products">Популярное</a></li>
+            <li><a href="#about">О нас</a></li>
+            <li><a href="#contacts">Контакты</a></li>
+          </ul>
+        </nav>
+        <div class="header-actions">
+          <button class="cart-btn" id="cartBtn" type="button" aria-label="Корзина">
+            <span class="cart-icon">🛒</span>
+            <span class="cart-count" id="cartCount">0</span>
+          </button>
+          <div class="phone">📞 8 (800) 123-45-67</div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Hero Banner -->
+    <section class="hero">
+      <div class="hero-content">
+        <h1>Всё для строительства и ремонта</h1>
+        <p>Широкий ассортимент строительных материалов, инструментов и товаров для дома</p>
+        <a href="#products" class="hero-btn">Смотреть каталог</a>
+      </div>
+    </section>
+
+    <!-- Categories -->
+    <section class="categories" id="categories">
+      <h2 class="section-title">Категории товаров</h2>
+      <div class="categories-grid">
+        <div class="category-card">
+          <div class="category-icon">🎨</div>
+          <h3>Краски</h3>
+          <p>Краски для стен, потолков, фасадов</p>
+        </div>
+        <div class="category-card">
+          <div class="category-icon">🖼️</div>
+          <h3>Обои</h3>
+          <p>Обои виниловые, флизелиновые, бумажные</p>
+        </div>
+        <div class="category-card">
+          <div class="category-icon">🔨</div>
+          <h3>Инструменты</h3>
+          <p>Ручной и электроинструмент</p>
+        </div>
+        <div class="category-card">
+          <div class="category-icon">🔧</div>
+          <h3>Крепеж</h3>
+          <p>Саморезы, дюбели, анкеры</p>
+        </div>
+        <div class="category-card">
+          <div class="category-icon">🧱</div>
+          <h3>Смеси</h3>
+          <p>Штукатурка, шпаклевка, клей</p>
+        </div>
+        <div class="category-card">
+          <div class="category-icon">💡</div>
+          <h3>Электрика</h3>
+          <p>Провода, розетки, выключатели</p>
+        </div>
+        <div class="category-card">
+          <div class="category-icon">🚿</div>
+          <h3>Сантехника</h3>
+          <p>Трубы, фитинги, смесители</p>
+        </div>
+        <div class="category-card">
+          <div class="category-icon">🌳</div>
+          <h3>Сад и дача</h3>
+          <p>Удобрения, семена, инвентарь</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Products -->
+    <section class="products" id="products">
+      <h2 class="section-title">Популярные товары</h2>
+      <div class="products-grid">
+        <div class="product-card">
+          <div class="product-image">🎨</div>
+          <div class="product-info">
+            <div class="product-title">Краска акриловая белая</div>
+            <div class="product-category">Краски</div>
+            <div class="product-price">890 ₽</div>
+            <button class="product-btn">В корзину</button>
+          </div>
+        </div>
+        <div class="product-card">
+          <div class="product-image">🖼️</div>
+          <div class="product-info">
+            <div class="product-title">Обои виниловые</div>
+            <div class="product-category">Обои</div>
+            <div class="product-price">1 250 ₽</div>
+            <button class="product-btn">В корзину</button>
+          </div>
+        </div>
+        <div class="product-card">
+          <div class="product-image">🔨</div>
+          <div class="product-info">
+            <div class="product-title">Молоток слесарный</div>
+            <div class="product-category">Инструменты</div>
+            <div class="product-price">450 ₽</div>
+            <button class="product-btn">В корзину</button>
+          </div>
+        </div>
+        <div class="product-card">
+          <div class="product-image">🔧</div>
+          <div class="product-info">
+            <div class="product-title">Саморезы по дереву</div>
+            <div class="product-category">Крепеж</div>
+            <div class="product-price">120 ₽</div>
+            <button class="product-btn">В корзину</button>
+          </div>
+        </div>
+        <div class="product-card">
+          <div class="product-image">🧱</div>
+          <div class="product-info">
+            <div class="product-title">Штукатурка гипсовая</div>
+            <div class="product-category">Смеси</div>
+            <div class="product-price">380 ₽</div>
+            <button class="product-btn">В корзину</button>
+          </div>
+        </div>
+        <div class="product-card">
+          <div class="product-image">💡</div>
+          <div class="product-info">
+            <div class="product-title">Розетка двойная</div>
+            <div class="product-category">Электрика</div>
+            <div class="product-price">250 ₽</div>
+            <button class="product-btn">В корзину</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Features -->
+    <section class="features">
+      <div class="features-content">
+        <div class="feature">
+          <div class="feature-icon">🚚</div>
+          <h3>Быстрая доставка</h3>
+          <p>Доставка по городу в день заказа</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">💰</div>
+          <h3>Низкие цены</h3>
+          <p>Лучшие цены на рынке строительных материалов</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">✅</div>
+          <h3>Гарантия качества</h3>
+          <p>Все товары сертифицированы и имеют гарантию</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">💬</div>
+          <h3>Консультации</h3>
+          <p>Помощь в выборе товаров от наших специалистов</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer" id="contacts">
+      <div class="footer-content">
+        <div class="footer-section">
+          <h3>О компании</h3>
+          <ul>
+            <li><a href="#">О нас</a></li>
+            <li><a href="#">Вакансии</a></li>
+            <li><a href="#">Новости</a></li>
+            <li><a href="#">Партнерам</a></li>
+          </ul>
+        </div>
+        <div class="footer-section">
+          <h3>Покупателям</h3>
+          <ul>
+            <li><a href="#">Доставка и оплата</a></li>
+            <li><a href="#">Возврат товара</a></li>
+            <li><a href="#">Гарантия</a></li>
+            <li><a href="#">Акции</a></li>
+          </ul>
+        </div>
+        <div class="footer-section">
+          <h3>Контакты</h3>
+          <ul>
+            <li>📞 8 (800) 123-45-67</li>
+            <li>✉️ info@stroymarket.ru</li>
+            <li>📍 г. Москва, ул. Строительная, д. 1</li>
+            <li>🕐 Пн-Вс: 9:00 - 21:00</li>
+          </ul>
+        </div>
+        <div class="footer-section">
+          <h3>Мы в соцсетях</h3>
+          <ul>
+            <li><a href="#">ВКонтакте</a></li>
+            <li><a href="#">Telegram</a></li>
+            <li><a href="#">Instagram</a></li>
+            <li><a href="#">YouTube</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 СтройМаркет. Все права защищены.</p>
+      </div>
+    </footer>
+
+    <!-- Cart Modal -->
+    <div class="cart-modal" id="cartModal">
+      <div class="cart-overlay"></div>
+      <div class="cart-content">
+        <div class="cart-header">
+          <h2 class="cart-title">Корзина</h2>
+          <button class="cart-close" id="cartCloseBtn" type="button" aria-label="Закрыть корзину">×</button>
+        </div>
+        <div class="cart-items" id="cartItems">
+          <!-- Cart items will be inserted here -->
+        </div>
+        <div class="cart-footer">
+          <div class="cart-total">
+            <span class="cart-total-label">Итого:</span>
+            <span class="cart-total-price" id="cartTotal">0 RUB</span>
+          </div>
+          <button class="cart-checkout" id="cartCheckout" type="button">Оформить заказ</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Виджет чата -->
+    <script
+      src="/loader.js"
+      data-widget-key="demo"
+      data-position="right"
+      data-margin="24"
+      data-primary-color="#667eea"
+    ></script>
+
+    <!-- Cart JavaScript -->
+    <script>
+      (function() {
+        var cartStorageKey = "site_cart";
+        var cartBtn = document.getElementById("cartBtn");
+        var cartModal = document.getElementById("cartModal");
+        var cartCloseBtn = document.getElementById("cartCloseBtn");
+        var cartItemsEl = document.getElementById("cartItems");
+        var cartCountEl = document.getElementById("cartCount");
+        var cartTotalEl = document.getElementById("cartTotal");
+        var cartCheckoutBtn = document.getElementById("cartCheckout");
+
+        function getCart() {
+          try {
+            var cartJson = localStorage.getItem(cartStorageKey);
+            return cartJson ? JSON.parse(cartJson) : [];
+          } catch (e) {
+            return [];
+          }
+        }
+
+        function saveCart(cart) {
+          try {
+            localStorage.setItem(cartStorageKey, JSON.stringify(cart));
+          } catch (e) {
+            console.error("Failed to save cart:", e);
+          }
+        }
+
+        function parsePrice(priceStr) {
+          var match = String(priceStr).match(/(\d+)/);
+          return match ? parseInt(match[1], 10) : 0;
+        }
+
+        function getPriceCurrency(priceStr) {
+          var match = String(priceStr).match(/(RUB|руб|₽|рублей)/i);
+          return match ? match[1].toUpperCase() : "RUB";
+        }
+
+        function calculateTotal(cart) {
+          var total = 0;
+          var currency = "RUB";
+          
+          for (var i = 0; i < cart.length; i++) {
+            var item = cart[i];
+            var price = parsePrice(item.price);
+            var quantity = item.quantity || 1;
+            total += price * quantity;
+            
+            if (!currency && item.price) {
+              currency = getPriceCurrency(item.price);
+            }
+          }
+          
+          return {
+            total: total,
+            currency: currency
+          };
+        }
+
+        function addToCart(product) {
+          var cart = getCart();
+          
+          // Проверяем, есть ли уже такой товар в корзине
+          var existingIndex = cart.findIndex(function(item) {
+            return item.name === product.name && item.price === product.price;
+          });
+          
+          if (existingIndex !== -1) {
+            // Увеличиваем количество
+            cart[existingIndex].quantity = (cart[existingIndex].quantity || 1) + 1;
+          } else {
+            // Добавляем новый товар
+            cart.push({
+              name: product.name,
+              price: product.price,
+              category: product.category || "Товары",
+              quantity: 1
+            });
+          }
+          
+          saveCart(cart);
+          updateCartUI();
+        }
+
+        function removeFromCart(index) {
+          var cart = getCart();
+          cart.splice(index, 1);
+          saveCart(cart);
+          updateCartUI();
+        }
+
+        function updateCartQuantity(index, delta) {
+          var cart = getCart();
+          if (index >= 0 && index < cart.length) {
+            var newQuantity = (cart[index].quantity || 1) + delta;
+            if (newQuantity <= 0) {
+              cart.splice(index, 1);
+            } else {
+              cart[index].quantity = newQuantity;
+            }
+            saveCart(cart);
+            updateCartUI();
+            
+            // Отправляем информацию об обновлении в виджет
+            var item = cart[index] || (delta < 0 ? null : null);
+            if (item || delta < 0) {
+              var iframes = document.querySelectorAll("iframe");
+              iframes.forEach(function(iframe) {
+                try {
+                  iframe.contentWindow.postMessage({
+                    type: "CART_UPDATED",
+                    product: delta < 0 ? cart[index] : item,
+                    inCart: newQuantity > 0
+                  }, "*");
+                } catch (e) {
+                  // Игнорируем ошибки cross-origin
+                }
+              });
+            }
+          }
+        }
+
+        function removeFromCartByProduct(productName, productPrice) {
+          var cart = getCart();
+          var index = cart.findIndex(function(item) {
+            return item.name === productName && item.price === productPrice;
+          });
+          
+          if (index !== -1) {
+            // Удаляем товар полностью
+            cart.splice(index, 1);
+            saveCart(cart);
+            updateCartUI();
+            
+            // Отправляем информацию об удалении в виджет
+            var iframes = document.querySelectorAll("iframe");
+            iframes.forEach(function(iframe) {
+              try {
+                iframe.contentWindow.postMessage({
+                  type: "CART_UPDATED",
+                  product: { name: productName, price: productPrice },
+                  inCart: false
+                }, "*");
+              } catch (e) {
+                // Игнорируем ошибки cross-origin
+              }
+            });
+            
+            return true;
+          }
+          return false;
+        }
+
+        function isProductInCart(productName, productPrice) {
+          var cart = getCart();
+          return cart.some(function(item) {
+            return item.name === productName && item.price === productPrice;
+          });
+        }
+
+        function updateCartUI() {
+          var cart = getCart();
+          var count = cart.reduce(function(sum, item) {
+            return sum + (item.quantity || 1);
+          }, 0);
+          
+          // Обновляем счетчик в кнопке корзины
+          if (cartCountEl) {
+            cartCountEl.textContent = count > 0 ? count : "";
+          }
+          
+          // Обновляем содержимое корзины
+          if (cartItemsEl) {
+            if (cart.length === 0) {
+              cartItemsEl.innerHTML = '<div class="cart-empty">Корзина пуста</div>';
+              if (cartCheckoutBtn) {
+                cartCheckoutBtn.disabled = true;
+              }
+            } else {
+              cartItemsEl.innerHTML = "";
+              
+              for (var i = 0; i < cart.length; i++) {
+                var item = cart[i];
+                var cartItem = document.createElement("div");
+                cartItem.className = "cart-item";
+                
+                var itemInfo = document.createElement("div");
+                itemInfo.className = "cart-item-info";
+                
+                var itemName = document.createElement("div");
+                itemName.className = "cart-item-name";
+                itemName.textContent = item.name;
+                
+                var itemPrice = document.createElement("div");
+                itemPrice.className = "cart-item-price";
+                var quantity = item.quantity || 1;
+                var price = parsePrice(item.price);
+                var currency = getPriceCurrency(item.price);
+                itemPrice.textContent = price + " " + currency;
+                
+                // Блок управления количеством
+                var quantityControl = document.createElement("div");
+                quantityControl.className = "cart-item-quantity";
+                
+                var decreaseBtn = document.createElement("button");
+                decreaseBtn.className = "cart-quantity-btn";
+                decreaseBtn.textContent = "−";
+                decreaseBtn.onclick = function(index) {
+                  return function() {
+                    updateCartQuantity(index, -1);
+                  };
+                }(i);
+                
+                var quantityValue = document.createElement("span");
+                quantityValue.className = "cart-quantity-value";
+                quantityValue.textContent = quantity;
+                
+                var increaseBtn = document.createElement("button");
+                increaseBtn.className = "cart-quantity-btn";
+                increaseBtn.textContent = "+";
+                increaseBtn.onclick = function(index) {
+                  return function() {
+                    updateCartQuantity(index, 1);
+                  };
+                }(i);
+                
+                quantityControl.appendChild(decreaseBtn);
+                quantityControl.appendChild(quantityValue);
+                quantityControl.appendChild(increaseBtn);
+                
+                // Итоговая цена за все единицы товара
+                var totalPrice = document.createElement("div");
+                totalPrice.className = "cart-item-price";
+                totalPrice.style.marginTop = "4px";
+                totalPrice.textContent = "Итого: " + (price * quantity).toLocaleString("ru-RU") + " " + currency;
+                
+                itemInfo.appendChild(itemName);
+                itemInfo.appendChild(itemPrice);
+                itemInfo.appendChild(quantityControl);
+                itemInfo.appendChild(totalPrice);
+                
+                var removeBtn = document.createElement("button");
+                removeBtn.className = "cart-item-remove";
+                removeBtn.textContent = "×";
+                removeBtn.onclick = function(index) {
+                  return function() {
+                    removeFromCart(index);
+                  };
+                }(i);
+                
+                cartItem.appendChild(itemInfo);
+                cartItem.appendChild(removeBtn);
+                cartItemsEl.appendChild(cartItem);
+              }
+              
+              if (cartCheckoutBtn) {
+                cartCheckoutBtn.disabled = false;
+              }
+            }
+          }
+          
+          // Обновляем итоговую сумму
+          if (cartTotalEl) {
+            var totalInfo = calculateTotal(cart);
+            cartTotalEl.textContent = totalInfo.total > 0 
+              ? totalInfo.total.toLocaleString("ru-RU") + " " + totalInfo.currency
+              : "0 " + totalInfo.currency;
+          }
+        }
+
+        function showCart() {
+          if (cartModal) {
+            cartModal.classList.add("active");
+          }
+        }
+
+        function hideCart() {
+          if (cartModal) {
+            cartModal.classList.remove("active");
+          }
+        }
+
+        // Event handlers
+        if (cartBtn) {
+          cartBtn.onclick = function() {
+            showCart();
+          };
+        }
+
+        if (cartCloseBtn) {
+          cartCloseBtn.onclick = function() {
+            hideCart();
+          };
+        }
+
+        if (cartModal) {
+          var overlay = cartModal.querySelector(".cart-overlay");
+          if (overlay) {
+            overlay.onclick = function() {
+              hideCart();
+            };
+          }
+        }
+
+        if (cartCheckoutBtn) {
+          cartCheckoutBtn.onclick = function() {
+            var cart = getCart();
+            if (cart.length === 0) {
+              return;
+            }
+            
+            var totalInfo = calculateTotal(cart);
+            alert("Оформление заказа:\n\nИтого: " + totalInfo.total.toLocaleString("ru-RU") + " " + totalInfo.currency + "\n\nФункция оформления заказа будет реализована позже.");
+          };
+        }
+
+        // Обработка сообщений от виджета
+        window.addEventListener("message", function(event) {
+          if (event.data && event.data.type === "ADD_TO_CART") {
+            addToCart(event.data.product);
+            
+            // Отправляем обратно информацию об обновлении состояния
+            var iframes = document.querySelectorAll("iframe");
+            iframes.forEach(function(iframe) {
+              try {
+                iframe.contentWindow.postMessage({
+                  type: "CART_UPDATED",
+                  product: event.data.product,
+                  inCart: true
+                }, "*");
+              } catch (e) {
+                // Игнорируем ошибки cross-origin
+              }
+            });
+          }
+          
+          if (event.data && event.data.type === "REMOVE_FROM_CART") {
+            var removed = removeFromCartByProduct(
+              event.data.product.name,
+              event.data.product.price
+            );
+            
+            // Отправляем обратно информацию об обновлении состояния
+            var iframes = document.querySelectorAll("iframe");
+            iframes.forEach(function(iframe) {
+              try {
+                iframe.contentWindow.postMessage({
+                  type: "CART_UPDATED",
+                  product: event.data.product,
+                  inCart: false
+                }, "*");
+              } catch (e) {
+                // Игнорируем ошибки cross-origin
+              }
+            });
+          }
+          
+          if (event.data && event.data.type === "CHECK_CART_STATUS") {
+            var inCart = isProductInCart(
+              event.data.product.name,
+              event.data.product.price
+            );
+            
+            // Отправляем ответ обратно в виджет
+            var iframes = document.querySelectorAll("iframe");
+            iframes.forEach(function(iframe) {
+              try {
+                iframe.contentWindow.postMessage({
+                  type: "CART_STATUS_RESPONSE",
+                  product: event.data.product,
+                  inCart: inCart
+                }, "*");
+              } catch (e) {
+                // Игнорируем ошибки cross-origin
+              }
+            });
+          }
+        });
+
+        // Инициализируем корзину при загрузке
+        updateCartUI();
+      })();
+    </script>
+  </body>
+</html>

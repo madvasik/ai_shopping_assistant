@@ -1,0 +1,22 @@
+name: ai_commercial_chatbot
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai_commercial_chatbot
+    ports:
+      - "8501:8501"  # Streamlit
+      - "8001:8001"  # Widget
+    env_file:
+      - .env
+    environment:
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+    volumes:
+      # Монтируем код для разработки (изменения применяются без пересборки)
+      - ./back:/app/back
+      - ./widget:/app/widget
+      # Опционально: монтируем данные, если хотите обновлять их без пересборки
+      - ./back/database:/app/back/database:ro
+    restart: unless-stopped

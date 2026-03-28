@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Widget Demo (Plain HTML)</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 24px; line-height: 1.5; }
+      code { background: #f3f4f6; padding: 2px 6px; border-radius: 6px; }
+      .box { border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; background: #fafafa; }
+    </style>
+  </head>
+  <body>
+    <h1>Plain HTML demo</h1>
+    <div class="box">
+      <p>This is the “most outdated” demo page.</p>
+      <p>Integration is one line:</p>
+      <p><code>&lt;script src="http://localhost:8001/loader.js" data-widget-key="demo"&gt;&lt;/script&gt;</code></p>
+      <p>Click the circle button in the corner to open the chat.</p>
+    </div>
+
+    <script
+      src="http://localhost:8001/loader.js"
+      data-widget-key="demo"
+      data-position="right"
+      data-margin="24"
+      data-primary-color="#4f46e5"
+    ></script>
+  </body>
+</html>

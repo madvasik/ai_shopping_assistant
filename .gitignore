@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+venv/
+.venv/
+back/venv/
+widget/.venv/
+dist/
+build/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Streamlit
+.streamlit/
+
+# Data (опционально, раскомментируйте если не хотите коммитить данные)
+# database/*.xlsx
+# database/*.csv
+
+# Logs
+*.log
+
+# Combined sources (may contain secrets)
+combined_sources.txt
+**/combined_sources.txt
