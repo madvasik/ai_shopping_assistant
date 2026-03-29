@@ -1,23 +1,19 @@
 # -*- coding: utf-8 -*-
 """
 Unit-тесты для `src.services.intent_classifier`:
-клиент OpenAI, слоты, классификация интента, проверка тематики каталога,
-поиск товара, извлечение сущностей, NLU, релевантность карточек.
+клиент OpenAI, классификация интента, проверка тематики каталога,
+извлечение сущностей, релевантность карточек.
 """
 from unittest.mock import MagicMock, patch
 
-import pandas as pd
 import pytest
 
 from src.services.intent_classifier import (
-    Slots,
     _get_openai_client as ic_get_client,
     check_products_relevance,
     classify_intent,
     extract_product_names_from_query,
-    find_product_in_catalog,
     is_catalog_related,
-    nlu_with_llm,
 )
 from tests.support.openai_client import openai_client_returning
 
@@ -62,20 +58,6 @@ def test_ic_get_openai_import_fails(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "sk-x")
     c, err = ic_get_client()
     assert c is None and "openai" in err.lower()
-
-
-# ---------------------------------------------------------------------------
-# Slots
-# ---------------------------------------------------------------------------
-
-
-def test_slots_merge_skips_empty():
-    a = Slots(budget_min=100.0)
-    b = Slots(budget_max=200.0, language="en")
-    a.merge(b)
-    assert a.budget_min == 100.0
-    assert a.budget_max == 200.0
-    assert a.language == "en"
 
 
 # ---------------------------------------------------------------------------
@@ -125,7 +107,7 @@ def test_classify_intent_gibberish_defaults_task(monkeypatch):
 def test_classify_intent_api_raises(monkeypatch):
     c = MagicMock()
 
-    def boom(**kwargs):
+    def boom(**_kwargs):
         raise RuntimeError("api down")
 
     c.chat.completions.create.side_effect = boom
@@ -159,7 +141,7 @@ def test_classify_intent_includes_assistant_in_context(monkeypatch):
 
 
 def test_is_catalog_related_empty():
-    assert is_catalog_related("", MagicMock()) is False
+    assert is_catalog_related("") is False
 
 
 def test_is_catalog_related_no_client(monkeypatch):
@@ -167,7 +149,7 @@ def test_is_catalog_related_no_client(monkeypatch):
         "src.services.intent_classifier._get_openai_client",
         lambda: (None, "x"),
     )
-    assert is_catalog_related("краска", MagicMock()) is False
+    assert is_catalog_related("краска") is False
 
 
 def test_is_catalog_related_da(monkeypatch):
@@ -176,7 +158,7 @@ def test_is_catalog_related_da(monkeypatch):
         "src.services.intent_classifier._get_openai_client",
         lambda: (c, None),
     )
-    assert is_catalog_related("обои", MagicMock()) is True
+    assert is_catalog_related("обои") is True
 
 
 def test_is_catalog_related_net(monkeypatch):
@@ -185,7 +167,7 @@ def test_is_catalog_related_net(monkeypatch):
         "src.services.intent_classifier._get_openai_client",
         lambda: (c, None),
     )
-    assert is_catalog_related("пицца", MagicMock()) is False
+    assert is_catalog_related("пицца") is False
 
 
 def test_is_catalog_related_api_raises(monkeypatch):
@@ -195,49 +177,7 @@ def test_is_catalog_related_api_raises(monkeypatch):
         "src.services.intent_classifier._get_openai_client",
         lambda: (c, None),
     )
-    assert is_catalog_related("q", MagicMock()) is False
-
-
-# ---------------------------------------------------------------------------
-# find_product_in_catalog
-# ---------------------------------------------------------------------------
-
-
-def test_find_product_in_catalog_guards():
-    assert find_product_in_catalog("", MagicMock()) is None
-    assert find_product_in_catalog("x", None) is None
-
-
-def test_find_product_in_catalog_hits_and_misses():
-    df = pd.DataFrame(
-        {
-            "title": ["A", "B"],
-            "category": ["", ""],
-            "description": ["", ""],
-            "price": [1, 2],
-            "price_currency": ["RUB", "RUB"],
-            "search_text": ["alpha uniquezz", "beta uniqueyy"],
-        }
-    )
-    from src.services.product_search import Retriever
-
-    r = Retriever(df)
-    assert find_product_in_catalog("gamma", r, threshold=0.99) is None
-    hit = find_product_in_catalog("uniquezz", r, threshold=0.01)
-    assert hit is not None
-    assert len(hit) == 1
-
-
-def test_find_product_in_catalog_search_raises():
-    bad = MagicMock()
-    bad.search.side_effect = RuntimeError("db")
-    assert find_product_in_catalog("x", bad) is None
-
-
-def test_find_product_in_catalog_empty_results():
-    r = MagicMock()
-    r.search.return_value = pd.DataFrame()
-    assert find_product_in_catalog("q", r) is None
+    assert is_catalog_related("q") is False
 
 
 # ---------------------------------------------------------------------------
@@ -298,60 +238,6 @@ def test_extract_product_names_json_not_list(monkeypatch):
         lambda: (c, None),
     )
     assert extract_product_names_from_query("x") == []
-
-
-# ---------------------------------------------------------------------------
-# nlu_with_llm
-# ---------------------------------------------------------------------------
-
-
-def test_nlu_mode_off():
-    s = Slots(budget_min=50)
-    out = nlu_with_llm([], s, mode="off")
-    assert out.budget_min == 50
-
-
-def test_nlu_no_client_returns_current(monkeypatch):
-    monkeypatch.setattr(
-        "src.services.intent_classifier._get_openai_client",
-        lambda: (None, "x"),
-    )
-    s = Slots(budget_min=10)
-    out = nlu_with_llm([{"role": "user", "content": "x"}], s)
-    assert out.budget_min == 10
-
-
-def test_nlu_merge_from_llm(monkeypatch):
-    c = openai_client_returning('{"budget_min": 70000, "budget_max": null, "language": "ru"}')
-    monkeypatch.setattr(
-        "src.services.intent_classifier._get_openai_client",
-        lambda: (c, None),
-    )
-    out = nlu_with_llm(
-        [{"role": "user", "content": "до 70к"}], Slots(), mode="assist"
-    )
-    assert out.budget_min == 70000
-
-
-def test_nlu_code_fence_json(monkeypatch):
-    c = openai_client_returning('```\n{"budget_max": 99, "budget_min": null, "language": "ru"}\n```')
-    monkeypatch.setattr(
-        "src.services.intent_classifier._get_openai_client",
-        lambda: (c, None),
-    )
-    out = nlu_with_llm([], Slots(budget_min=1), mode="assist")
-    assert out.budget_max == 99
-    assert out.budget_min == 1
-
-
-def test_nlu_invalid_json_falls_back_to_slots(monkeypatch):
-    c = openai_client_returning("{{{broken")
-    monkeypatch.setattr(
-        "src.services.intent_classifier._get_openai_client",
-        lambda: (c, None),
-    )
-    out = nlu_with_llm([], Slots(budget_min=5), mode="assist")
-    assert out.budget_min == 5
 
 
 # ---------------------------------------------------------------------------

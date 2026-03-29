@@ -405,7 +405,7 @@ def _process_message(
         last_user = message
         
         # Проверяем отношение к каталогу ПЕРЕД классификацией интента
-        catalog_related = is_catalog_related(last_user, _retriever, threshold=0.1)
+        catalog_related = is_catalog_related(last_user)
         
         if not catalog_related:
             return (
@@ -599,19 +599,15 @@ def _process_message(
 
 def process_chat_request(
     message: str,
-    widget_key: str,
-    context: Optional[Dict[str, Any]] = None,
     conversation_history: Optional[List[Dict[str, str]]] = None,
 ) -> Dict[str, Any]:
     """
-    Обрабатывает запрос чата и возвращает ответ в формате для виджета
-    
+    Обрабатывает запрос чата и возвращает ответ в формате для виджета.
+
     Args:
         message: Текст сообщения пользователя
-        widget_key: Ключ виджета
-        context: Контекст запроса (page_url, page_title и т.д.)
         conversation_history: История диалога
-    
+
     Returns:
         Словарь с полем "reply" содержащим текст ответа
     """

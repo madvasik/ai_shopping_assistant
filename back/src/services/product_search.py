@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List
 import sqlite3
 import pandas as pd
 import numpy as np
@@ -178,16 +178,3 @@ class Retriever:
         
         # Сортируем по убыванию score и возвращаем top_k
         return result_df.sort_values("_bm25_score", ascending=False).head(top_k).copy()
-
-def apply_filters(df: pd.DataFrame, slots: Dict[str, Any]) -> pd.DataFrame:
-    """Применяет фильтры к результатам поиска. Только фильтр по цене."""
-    out = df.copy()
-    
-    # Фильтр по бюджету
-    bmin, bmax = slots.get("budget_min"), slots.get("budget_max")
-    if bmin is not None:
-        out = out[out["price"].fillna(0) >= float(bmin)]
-    if bmax is not None:
-        out = out[out["price"].fillna(1e18) <= float(bmax)]
-    
-    return out

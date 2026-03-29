@@ -1,4 +1,4 @@
-import os, sys, time, json
+import sys, time, json
 from pathlib import Path
 import streamlit as st
 from dotenv import load_dotenv
@@ -122,7 +122,6 @@ st.title("📊 Панель логов LLM")
 # Загружаем логи из файла
 logs = _load_logs()
 user_requests = logs.get("user_requests", [])
-llm_request_count = logs.get("llm_request_count", 0)
 
 # Подсчитываем статистику
 total_llm_calls = sum(len(ur.get("llm_requests", [])) for ur in user_requests)

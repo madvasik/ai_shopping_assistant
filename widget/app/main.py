@@ -172,19 +172,15 @@ async def _proxy_chat(payload: Dict[str, Any]) -> Dict[str, Any]:
             
             session_id = payload.get("session_id")
             message = payload.get("message", "")
-            widget_key = payload.get("widget_key", "demo")
-            context = payload.get("context", {})
-            
+
             # Получаем историю сообщений из сессии
             conversation_history = []
             if session_id and session_id in SESSIONS:
                 conversation_history = SESSIONS[session_id].get("messages", [])
-            
+
             # Обрабатываем запрос через локальный API
             result = process_chat_request(
                 message=message,
-                widget_key=widget_key,
-                context=context,
                 conversation_history=conversation_history,
             )
             

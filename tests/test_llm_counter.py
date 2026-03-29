@@ -27,7 +27,7 @@ def test_update_llm_response_invokes_callback():
 
 
 def test_callbacks_swallow_errors():
-    def bad_cb(*args, **kwargs):
+    def bad_cb(*_args, **_kwargs):
         raise RuntimeError("boom")
 
     llm_counter.set_llm_counter_callback(bad_cb)

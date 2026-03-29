@@ -4,7 +4,6 @@
 Использует глобальную callback функцию для совместимости с разными контекстами выполнения.
 """
 from typing import Optional, Callable, Dict, Any
-from datetime import datetime
 
 # Глобальная callback функция для увеличения счетчика и логирования запроса
 _llm_counter_callback: Optional[Callable[[str, Optional[str]], None]] = None

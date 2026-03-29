@@ -1,11 +1,8 @@
 # -*- coding: utf-8 -*-
 import os, json
-from typing import Dict, Any, List, Optional, TYPE_CHECKING
-from pydantic import BaseModel, Field
+from typing import Dict, Any, List
 from .llm_counter import increment_llm_counter, update_llm_response
 
-if TYPE_CHECKING:
-    import pandas as pd
 
 def _get_openai_client():
     """
@@ -25,20 +22,6 @@ def _get_openai_client():
         return client, None
     except Exception as e:
         return None, str(e)
-
-class Slots(BaseModel):
-    """Упрощенные слоты - только бюджет"""
-    budget_min: Optional[float] = None
-    budget_max: Optional[float] = None
-    language: str = "ru"
-
-    def merge(self, other: "Slots"):
-        """Объединяет слоты из другого объекта"""
-        for k, v in other.model_dump().items():
-            if v in (None, [], ""):
-                continue
-            setattr(self, k, v)
-
 
 def classify_intent(messages: List[Dict[str,str]], 
                    temperature: float = 0.2,
@@ -119,7 +102,7 @@ def classify_intent(messages: List[Dict[str,str]],
         # Значение по умолчанию при ошибке
         return "task"
 
-def is_catalog_related(query: str, retriever: Any, threshold: float = 0.1) -> bool:
+def is_catalog_related(query: str) -> bool:
     """
     Проверяет, относится ли вопрос к каталогу, используя только LLM.
     Возвращает True, если вопрос релевантен каталогу строительного магазина.
@@ -173,25 +156,6 @@ def is_catalog_related(query: str, retriever: Any, threshold: float = 0.1) -> bo
     except Exception:
         # Значение по умолчанию при ошибке
         return False
-
-def find_product_in_catalog(query: str, retriever: Any, threshold: float = 0.3) -> Optional[Any]:
-    """
-    Находит конкретный товар в каталоге.
-    Возвращает DataFrame с найденными товарами, если сходство > threshold, иначе None.
-    """
-    if not query or not retriever:
-        return None
-    try:
-        results = retriever.search(query, top_k=5)
-        if results.empty:
-            return None
-        top_item = results.iloc[0]
-        # Используем BM25 score вместо _sem_sim
-        if top_item["_bm25_score"] > threshold:
-            return results.head(1)
-        return None
-    except Exception:
-        return None
 
 def extract_product_names_from_query(query: str, 
                                      temperature: float = 0.2,
@@ -277,72 +241,6 @@ def extract_product_names_from_query(query: str,
         # При ошибке возвращаем пустой список
         return []
 
-def nlu_with_llm(messages: List[Dict[str,str]], current_slots: Slots,
-                 mode: str = "assist",
-                 temperature: float = 0.2,
-                 top_p: float = 0.95,
-                 seed: int = 42) -> Slots:
-    """
-    Извлекает слоты используя только LLM, без эвристики.
-    mode: off | assist | dominant (в настоящее время не используется, всегда использует LLM)
-    """
-    if mode == "off":
-        # Если режим выключен, возвращаем текущие слоты без изменений
-        return current_slots or Slots()
-
-    # Извлечение через Mistral API
-    client, err = _get_openai_client()
-    if err or client is None:
-        # Если LLM недоступен, возвращаем текущие слоты
-        return current_slots or Slots()
-
-    sys_prompt = (
-        "Ты NLU ассистент для российского онлайн магазина. Верни ТОЛЬКО валидный JSON по схеме ниже, "
-        "без объяснений, без markdown.\n"
-        "Схема:\n"
-        "{\n"
-        '  "budget_min": float|null,\n'
-        '  "budget_max": float|null,\n'
-        '  "language": "ru"\n'
-        "}\n"
-        "Правила: Извлекай только то, что указал пользователь. "
-        "Бюджет в рублях (RUB). '70к' или '70 тыс' => 70000.\n"
-    )
-
-    user_prompt = json.dumps(
-        {
-            "last_messages": messages[-6:],
-            "current_slots": current_slots.model_dump() if current_slots else {}
-        },
-        ensure_ascii=False
-    )
-
-    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-
-    try:
-        resp = client.chat.completions.create(
-            model=model,
-            max_tokens=200,
-            temperature=temperature,
-            top_p=top_p,
-            messages=[
-                {"role":"system", "content": sys_prompt},
-                {"role":"user", "content": user_prompt},
-            ],
-        )
-        text = (resp.choices[0].message.content or "").strip()
-        if text.startswith("```"):
-            text = text.strip("`")
-            text = text[text.find("{") : text.rfind("}")+1]
-        data = json.loads(text)
-        s_llm = Slots(**data)
-    except Exception:
-        s_llm = Slots()
-
-    s = current_slots or Slots()
-    s.merge(s_llm)
-    return s
-
 def check_products_relevance(category_name: str, products: List[Dict[str, Any]], 
                             temperature: float = 0.2,
                             top_p: float = 0.95) -> List[int]:
@@ -364,37 +262,38 @@ def check_products_relevance(category_name: str, products: List[Dict[str, Any]],
     
     # Проверяем все переданные товары (обычно это вся карусель - до 3 товаров)
     products_to_check = products
-    
-    client, err = _get_openai_client()
-    if err or client is None:
-        # Если LLM недоступен, возвращаем все как релевантные (fallback)
-        return [1] * len(products_to_check)
-    
-    # Формируем описание товаров для промпта
+
+    # Сначала отделяем товары с валидным названием — без этого LLM не вызываем и не считаем их релевантными
     products_text = []
     valid_indices = []
     for idx, product in enumerate(products_to_check):
         title = str(product.get("title", "")).strip()
         if not title or title == "nan":
-            # Товары без названия считаем нерелевантными (вернем 0)
             continue
-        
+
         category = str(product.get("category", "")).strip()
         description = str(product.get("description", "")).strip()
-        
+
         product_num = len(valid_indices) + 1
         product_info = f"Товар {product_num}: {title}"
         if category and category != "nan":
             product_info += f" (категория: {category})"
         if description and description != "nan":
             product_info += f" - {description}"
-        
+
         products_text.append(product_info)
         valid_indices.append(idx)
-    
-    # Если нет валидных товаров, возвращаем все нули
+
     if not valid_indices:
         return [0] * len(products_to_check)
+
+    client, err = _get_openai_client()
+    if err or client is None:
+        # Нет LLM: нерелевантные позиции уже отсеяны — остальные считаем релевантными
+        out = [0] * len(products_to_check)
+        for i in valid_indices:
+            out[i] = 1
+        return out
     
     products_list = "\n".join(products_text)
     

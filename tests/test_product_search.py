@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Тесты `src.services.product_search`: токенизация, загрузка SQLite, Retriever (BM25),
-фильтры по слотам.
+Тесты `src.services.product_search`: токенизация, загрузка SQLite, Retriever (BM25).
 """
 import sqlite3
 
@@ -13,7 +12,6 @@ from src.services.product_search import (
     Retriever,
     _ensure_cols,
     _tokenize,
-    apply_filters,
     load_products,
 )
 
@@ -118,21 +116,6 @@ def test_retriever_empty_query_returns_head():
     r = Retriever(df)
     out = r.search("", top_k=1)
     assert len(out) == 1
-
-
-def test_apply_filters_budget():
-    df = pd.DataFrame(
-        {
-            "title": ["a", "b", "c"],
-            "price": [10, 100, 200],
-            "category": ["", "", ""],
-            "description": ["", "", ""],
-            "price_currency": ["RUB", "RUB", "RUB"],
-            "search_text": ["", "", ""],
-        }
-    )
-    out = apply_filters(df, {"budget_min": 50, "budget_max": 150})
-    assert list(out["title"]) == ["b"]
 
 
 def test_retriever_query_only_punctuation_returns_head():

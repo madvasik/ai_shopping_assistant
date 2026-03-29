@@ -2,7 +2,7 @@
 """
 Модуль для определения необходимых товаров для задач
 """
-from typing import List, Dict, Optional, Union
+from typing import List, Dict, Optional, Any
 import os, json
 import re
 from .llm_counter import increment_llm_counter, update_llm_response
@@ -70,7 +70,7 @@ def _fix_json_control_chars(json_str: str) -> str:
     
     return ''.join(result)
 
-def get_required_products_for_task(task_description: str) -> Dict[str, any]:
+def get_required_products_for_task(task_description: str) -> Dict[str, Any]:
     """
     Определяет список необходимых товаров для задачи через LLM.
     Возвращает словарь с текстовым описанием товаров и списком названий для поиска.
