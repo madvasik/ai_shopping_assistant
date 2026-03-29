@@ -7,21 +7,21 @@ from .llm_counter import increment_llm_counter, update_llm_response
 if TYPE_CHECKING:
     import pandas as pd
 
-def _get_mistral_client():
+def _get_openai_client():
     """
-    Возвращает (client, err). Использует нативный клиент Mistral API.
+    Возвращает (client, err). Использует нативный клиент OpenAI API.
     """
     try:
-        from mistralai import Mistral
+        from openai import OpenAI
     except Exception as e:
-        return None, f"Ошибка импорта mistralai: {e}"
+        return None, f"Ошибка импорта openai: {e}"
 
-    api_key = os.getenv("MISTRAL_API_KEY")
+    api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        return None, "MISTRAL_API_KEY не установлен"
+        return None, "OPENAI_API_KEY не установлен"
 
     try:
-        client = Mistral(api_key=api_key)
+        client = OpenAI(api_key=api_key)
         return client, None
     except Exception as e:
         return None, str(e)
@@ -59,7 +59,7 @@ def classify_intent(messages: List[Dict[str,str]],
         return "task"  # По умолчанию task
     
     # Используем только LLM
-    client, err = _get_mistral_client()
+    client, err = _get_openai_client()
     if err or client is None:
         # Если LLM недоступен, возвращаем task по умолчанию
         return "task"
@@ -87,14 +87,14 @@ def classify_intent(messages: List[Dict[str,str]],
     )
     
     user_prompt = f"Контекст диалога:\n{context_text}\n\nКлассифицируй интент последнего сообщения пользователя:"
-    model = os.getenv("MISTRAL_MODEL", "mistral-medium-latest")
+    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
     
     # Формируем полный запрос для логирования
     full_prompt = f"System: {sys_prompt}\n\nUser: {user_prompt}"
     
     try:
         increment_llm_counter("classify_intent", full_prompt)  # Увеличиваем счетчик запросов к LLM
-        resp = client.chat.complete(
+        resp = client.chat.completions.create(
             model=model,
             max_tokens=10,
             temperature=temperature,
@@ -105,8 +105,9 @@ def classify_intent(messages: List[Dict[str,str]],
             ],
         )
         text = (resp.choices[0].message.content or "").strip().lower()
-        # Обновляем ответ в логе
-        update_llm_response(text)
+        update_llm_response(text,
+            prompt_tokens=resp.usage.prompt_tokens if resp.usage else None,
+            completion_tokens=resp.usage.completion_tokens if resp.usage else None)
         if "consultation" in text:
             return "consultation"
         elif "task" in text:
@@ -127,7 +128,7 @@ def is_catalog_related(query: str, retriever: Any, threshold: float = 0.1) -> bo
         return False
     
     # Используем LLM для проверки релевантности
-    client, err = _get_mistral_client()
+    client, err = _get_openai_client()
     if err or client is None:
         # Если LLM недоступен, возвращаем False по умолчанию
         return False
@@ -135,7 +136,8 @@ def is_catalog_related(query: str, retriever: Any, threshold: float = 0.1) -> bo
     sys_prompt = (
         "Ты помощник российского онлайн магазина строительных товаров. Определи, относится ли вопрос пользователя "
         "к тематике строительного магазина.\n\n"
-        "Строительный магазин обычно продает товары для строительства, ремонта, отделки, садоводства и дачи. "
+        "Строительный магазин обычно продает товары для строительства, ремонта, отделки, садоводства и дачи, а также электрику и электромонтаж: "
+        "кабель, автоматы и УЗО, электрощиты, розетки и выключатели, светильники и лампы для монтажа, крепёж и инструмент для электрики и т.п. "
         "Это могут быть материалы (краски, обои, клей, плитка, утеплители и т.д.), инструменты (для ремонта, садовые и т.д.), "
         "а также товары для садоводства и дачи (удобрения, семена, садовый инвентарь и т.д.).\n\n"
         "Определи сам, продаются ли товары, относящиеся к вопросу пользователя, в строительном магазине. "
@@ -146,14 +148,14 @@ def is_catalog_related(query: str, retriever: Any, threshold: float = 0.1) -> bo
     )
     
     user_prompt = f"Вопрос пользователя: {query}\n\nОтносится ли этот вопрос к тематике строительного онлайн магазина?"
-    model = os.getenv("MISTRAL_MODEL", "mistral-medium-latest")
+    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
     
     # Формируем полный запрос для логирования
     full_prompt = f"System: {sys_prompt}\n\nUser: {user_prompt}"
     
     try:
         increment_llm_counter("is_catalog_related", full_prompt)  # Увеличиваем счетчик запросов к LLM
-        resp = client.chat.complete(
+        resp = client.chat.completions.create(
             model=model,
             max_tokens=10,
             temperature=0.2,
@@ -164,8 +166,9 @@ def is_catalog_related(query: str, retriever: Any, threshold: float = 0.1) -> bo
             ],
         )
         text = (resp.choices[0].message.content or "").strip().lower()
-        # Обновляем ответ в логе
-        update_llm_response(text)
+        update_llm_response(text,
+            prompt_tokens=resp.usage.prompt_tokens if resp.usage else None,
+            completion_tokens=resp.usage.completion_tokens if resp.usage else None)
         return "да" in text
     except Exception:
         # Значение по умолчанию при ошибке
@@ -201,7 +204,7 @@ def extract_product_names_from_query(query: str,
     if not query:
         return []
     
-    client, err = _get_mistral_client()
+    client, err = _get_openai_client()
     if err or client is None:
         return []
     
@@ -232,14 +235,14 @@ def extract_product_names_from_query(query: str,
     )
     
     user_prompt = f"Запрос пользователя: {query}\n\nИзвлеки все наименования товаров и инструментов из этого запроса:"
-    model = os.getenv("MISTRAL_MODEL", "mistral-medium-latest")
+    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
     
     # Формируем полный запрос для логирования
     full_prompt = f"System: {sys_prompt}\n\nUser: {user_prompt}"
     
     try:
         increment_llm_counter("extract_product_names_from_query", full_prompt)  # Увеличиваем счетчик запросов к LLM
-        resp = client.chat.complete(
+        resp = client.chat.completions.create(
             model=model,
             max_tokens=200,
             temperature=temperature,
@@ -250,16 +253,17 @@ def extract_product_names_from_query(query: str,
             ],
         )
         text = (resp.choices[0].message.content or "").strip()
-        
+
         # Очищаем markdown код блоки если есть
         if text.startswith("```"):
             text = text.strip("`")
             if text.startswith("json"):
                 text = text[4:]
             text = text.strip()
-        
-        # Обновляем ответ в логе
-        update_llm_response(text)
+
+        update_llm_response(text,
+            prompt_tokens=resp.usage.prompt_tokens if resp.usage else None,
+            completion_tokens=resp.usage.completion_tokens if resp.usage else None)
         
         # Извлекаем JSON массив
         if text.startswith("["):
@@ -287,7 +291,7 @@ def nlu_with_llm(messages: List[Dict[str,str]], current_slots: Slots,
         return current_slots or Slots()
 
     # Извлечение через Mistral API
-    client, err = _get_mistral_client()
+    client, err = _get_openai_client()
     if err or client is None:
         # Если LLM недоступен, возвращаем текущие слоты
         return current_slots or Slots()
@@ -313,10 +317,10 @@ def nlu_with_llm(messages: List[Dict[str,str]], current_slots: Slots,
         ensure_ascii=False
     )
 
-    model = os.getenv("MISTRAL_MODEL", "mistral-medium-latest")
+    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
     try:
-        resp = client.chat.complete(
+        resp = client.chat.completions.create(
             model=model,
             max_tokens=200,
             temperature=temperature,
@@ -361,7 +365,7 @@ def check_products_relevance(category_name: str, products: List[Dict[str, Any]],
     # Проверяем все переданные товары (обычно это вся карусель - до 3 товаров)
     products_to_check = products
     
-    client, err = _get_mistral_client()
+    client, err = _get_openai_client()
     if err or client is None:
         # Если LLM недоступен, возвращаем все как релевантные (fallback)
         return [1] * len(products_to_check)
@@ -415,13 +419,13 @@ def check_products_relevance(category_name: str, products: List[Dict[str, Any]],
         f"Верни строку из 0 и 1 для каждого товара (1 - соответствует категории '{category_name}', 0 - не соответствует):"
     )
     
-    model = os.getenv("MISTRAL_MODEL", "mistral-medium-latest")
+    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
     
     try:
         # Формируем полный запрос для логирования
         full_prompt = f"System: {sys_prompt}\n\nUser: {user_prompt}"
         increment_llm_counter("check_products_relevance", full_prompt)
-        resp = client.chat.complete(
+        resp = client.chat.completions.create(
             model=model,
             max_tokens=10,
             temperature=temperature,
@@ -432,9 +436,10 @@ def check_products_relevance(category_name: str, products: List[Dict[str, Any]],
             ],
         )
         text = (resp.choices[0].message.content or "").strip()
-        # Обновляем ответ в логе
-        update_llm_response(text)
-        
+        update_llm_response(text,
+            prompt_tokens=resp.usage.prompt_tokens if resp.usage else None,
+            completion_tokens=resp.usage.completion_tokens if resp.usage else None)
+
         # Извлекаем бинарные значения из ответа
         # Убираем все пробелы и нецифровые символы, оставляем только 0 и 1
         binary_str = "".join([c for c in text if c in "01"])

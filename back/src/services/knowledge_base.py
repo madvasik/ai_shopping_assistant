@@ -18,17 +18,17 @@ else:
 
 __all__ = ["CatalogKB", "KBAnswer"]
 
-def _get_mistral_client():
-    """Получает клиент Mistral API"""
+def _get_openai_client():
+    """Получает клиент OpenAI API"""
     try:
-        from mistralai import Mistral
+        from openai import OpenAI
     except Exception as e:
-        return None, f"Ошибка импорта mistralai: {e}"
-    api_key = os.getenv("MISTRAL_API_KEY")
+        return None, f"Ошибка импорта openai: {e}"
+    api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        return None, "MISTRAL_API_KEY не установлен"
+        return None, "OPENAI_API_KEY не установлен"
     try:
-        client = Mistral(api_key=api_key)
+        client = OpenAI(api_key=api_key)
         return client, None
     except Exception as e:
         return None, str(e)
@@ -84,7 +84,7 @@ class CatalogKB:
         )
 
     def _llm_answer(self, question: str, context_jsonl: str, language: str) -> Optional[str]:
-        client, err = _get_mistral_client()
+        client, err = _get_openai_client()
         if err or client is None: return None
         sys_prompt = (
             "Ты эксперт-консультант российского онлайн магазина строительных товаров. Отвечай на вопросы пользователя естественно и профессионально, "
@@ -138,12 +138,12 @@ class CatalogKB:
                 f"Дай краткую общую информацию и советы на основе своих знаний. Конкретные товары из каталога будут показаны отдельно после ответа."
             )
         payload = user_prompt
-        model = os.getenv("MISTRAL_MODEL", "mistral-medium-latest")
+        model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
         try:
             # Логируем полный промпт (включая system и user сообщения)
             full_prompt = f"System: {sys_prompt}\n\nUser: {payload}"
             increment_llm_counter("_llm_answer", full_prompt)  # Увеличиваем счетчик запросов к LLM
-            resp = client.chat.complete(
+            resp = client.chat.completions.create(
                 model=model,
                 temperature=float(os.getenv("LLM_TEMPERATURE", "0.4")),
                 top_p=float(os.getenv("LLM_TOP_P", "0.95")),
@@ -151,8 +151,9 @@ class CatalogKB:
                 messages=[{"role":"system","content":sys_prompt},{"role":"user","content":payload}],
             )
             response_text = (resp.choices[0].message.content or "").strip()
-            # Обновляем ответ в логе
-            update_llm_response(response_text)
+            update_llm_response(response_text,
+                prompt_tokens=resp.usage.prompt_tokens if resp.usage else None,
+                completion_tokens=resp.usage.completion_tokens if resp.usage else None)
             return response_text
         except Exception:
             return None

@@ -7,19 +7,19 @@ import os, json
 import re
 from .llm_counter import increment_llm_counter, update_llm_response
 
-def _get_mistral_client():
-    """Получает клиент Mistral API"""
+def _get_openai_client():
+    """Получает клиент OpenAI API"""
     try:
-        from mistralai import Mistral
+        from openai import OpenAI
     except Exception as e:
-        return None, f"Ошибка импорта mistralai: {e}"
+        return None, f"Ошибка импорта openai: {e}"
 
-    api_key = os.getenv("MISTRAL_API_KEY")
+    api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        return None, "MISTRAL_API_KEY не установлен"
+        return None, "OPENAI_API_KEY не установлен"
 
     try:
-        client = Mistral(api_key=api_key)
+        client = OpenAI(api_key=api_key)
         return client, None
     except Exception as e:
         return None, str(e)
@@ -84,7 +84,7 @@ def get_required_products_for_task(task_description: str) -> Dict[str, any]:
             "products": [{"name": "обои"}, ...]
         }
     """
-    client, err = _get_mistral_client()
+    client, err = _get_openai_client()
     if err or client is None:
         # Если LLM недоступен, возвращаем пустой объект
         return {"text": "", "products": []}
@@ -129,13 +129,13 @@ def get_required_products_for_task(task_description: str) -> Dict[str, any]:
     )
     
     user_prompt = f"Задача пользователя: {task_description}\n\nСоздай связный текст с описанием необходимых товаров и список товаров для поиска."
-    model = os.getenv("MISTRAL_MODEL", "mistral-medium-latest")
+    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
     
     try:
         # Передаем полный промпт в лог (включая system и user сообщения)
         full_prompt = f"System: {sys_prompt}\n\nUser: {user_prompt}"
         increment_llm_counter("get_required_products_for_task", full_prompt)  # Увеличиваем счетчик запросов к LLM
-        resp = client.chat.complete(
+        resp = client.chat.completions.create(
             model=model,
             max_tokens=2000,
             temperature=0.6,
@@ -146,9 +146,10 @@ def get_required_products_for_task(task_description: str) -> Dict[str, any]:
             ],
         )
         text = (resp.choices[0].message.content or "").strip()
-        # Обновляем ответ в логе (полный текст)
-        update_llm_response(text)
-        
+        update_llm_response(text,
+            prompt_tokens=resp.usage.prompt_tokens if resp.usage else None,
+            completion_tokens=resp.usage.completion_tokens if resp.usage else None)
+
         # Извлекаем JSON из ответа
         # Удаляем markdown код блоки если есть
         if "```json" in text or "```" in text:
@@ -229,7 +230,7 @@ def should_ask_clarification(task_description: str, conversation_history: List[D
     Определяет, нужно ли задать уточняющий вопрос перед показом товаров.
     Возвращает вопрос для уточнения или None, если уточнения не нужны.
     """
-    client, err = _get_mistral_client()
+    client, err = _get_openai_client()
     if err or client is None:
         # Fallback: если LLM недоступен, не задаем вопросы
         return None
@@ -281,13 +282,13 @@ def should_ask_clarification(task_description: str, conversation_history: List[D
         f"Последний запрос пользователя: {task_description}\n\n"
         "Нужно ли задать уточняющий вопрос перед подбором товаров?"
     )
-    model = os.getenv("MISTRAL_MODEL", "mistral-medium-latest")
+    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
     
     try:
         # Передаем полный промпт в лог (включая system и user сообщения)
         full_prompt = f"System: {sys_prompt}\n\nUser: {user_prompt}"
         increment_llm_counter("should_ask_clarification", full_prompt)  # Увеличиваем счетчик запросов к LLM
-        resp = client.chat.complete(
+        resp = client.chat.completions.create(
             model=model,
             max_tokens=150,
             temperature=0.6,
@@ -298,9 +299,10 @@ def should_ask_clarification(task_description: str, conversation_history: List[D
             ],
         )
         text = (resp.choices[0].message.content or "").strip()
-        # Обновляем ответ в логе (полный текст)
-        update_llm_response(text)
-        
+        update_llm_response(text,
+            prompt_tokens=resp.usage.prompt_tokens if resp.usage else None,
+            completion_tokens=resp.usage.completion_tokens if resp.usage else None)
+
         # Если ответ содержит "НЕТ" или похожее, возвращаем None
         if any(word in text.upper() for word in ["НЕТ", "НЕ НУЖЕН", "НЕ НУЖНО", "НЕ ТРЕБУЕТСЯ"]):
             return None

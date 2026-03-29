@@ -56,6 +56,10 @@ MAX_CLARIFICATION_QUESTIONS = 2
 TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.4"))
 TOP_P = float(os.getenv("LLM_TOP_P", "0.95"))
 
+# Тарифы gpt-4o-mini ($ за токен)
+_INPUT_PRICE_PER_TOKEN = 0.150 / 1_000_000
+_OUTPUT_PRICE_PER_TOKEN = 0.600 / 1_000_000
+
 
 def _get_data_path() -> Path:
     """Определяет путь к источнику данных о товарах."""
@@ -217,14 +221,16 @@ def _increment_llm_counter(function_name: str = "Unknown", prompt_preview: str =
         pass  # Ошибки логируются в Streamlit через llm_logs.json
 
 
-def _update_llm_response(response_preview: str = None):
+def _update_llm_response(response_preview: str = None,
+                         prompt_tokens: int = None,
+                         completion_tokens: int = None):
     """Callback для обновления ответа в последней записи"""
     global _current_user_message_id
-    
+
     logs = _load_logs()
     if not logs.get("user_requests"):
         return
-    
+
     # Находим группу по ID или последнюю группу
     user_request = None
     if _current_user_message_id is not None:
@@ -232,29 +238,32 @@ def _update_llm_response(response_preview: str = None):
             if ur.get("id") == _current_user_message_id:
                 user_request = ur
                 break
-    
+
     if user_request is None and logs["user_requests"]:
         user_request = logs["user_requests"][-1]
-    
+
     if user_request and user_request.get("llm_requests"):
-        # Ищем последний запрос БЕЗ duration (самый старый без duration)
-        # Это гарантирует, что мы обновим правильный запрос даже при быстрых последовательных вызовах
         entry_to_update = None
         for entry in reversed(user_request["llm_requests"]):
             if entry.get("duration") is None and entry.get("start_time") is not None:
                 entry_to_update = entry
                 break
-        
-        # Если не нашли запрос без duration, берем последний (если список не пустой)
+
         if entry_to_update is None and len(user_request["llm_requests"]) > 0:
             entry_to_update = user_request["llm_requests"][-1]
-        
+
         entry_to_update["response_preview"] = response_preview or "N/A"
-        
+
+        if prompt_tokens is not None:
+            entry_to_update["prompt_tokens"] = prompt_tokens
+            entry_to_update["completion_tokens"] = completion_tokens or 0
+            cost = prompt_tokens * _INPUT_PRICE_PER_TOKEN + (completion_tokens or 0) * _OUTPUT_PRICE_PER_TOKEN
+            entry_to_update["cost_usd"] = round(cost, 6)
+
         if "start_time" in entry_to_update and entry_to_update["start_time"] is not None:
             end_time = time.time()
             duration_seconds = end_time - entry_to_update["start_time"]
-            
+
             if duration_seconds < 1:
                 duration_str = f"{duration_seconds * 1000:.0f}мс"
             elif duration_seconds < 60:
@@ -263,9 +272,9 @@ def _update_llm_response(response_preview: str = None):
                 minutes = int(duration_seconds // 60)
                 seconds = duration_seconds % 60
                 duration_str = f"{minutes}м {seconds:.1f}с"
-            
+
             entry_to_update["duration"] = duration_str
-    
+
     _save_logs(logs)
 
 
@@ -314,6 +323,16 @@ def _format_product_card(row: pd.Series) -> str:
         price_str = "Цена не указана"
     
     return f"• {title} — {price_str}"
+
+
+# Метка группы для парсера виджета: не попадает во вступление с markdown,
+# заголовок секции рисует только карусель (без дубля **Категория:**).
+_WIDGET_CATEGORY_PREFIX = "__WS_CAT__"
+
+
+def _widget_category_line(product_name: str) -> str:
+    label = (product_name or "").strip().capitalize() or "Товары"
+    return f"\n{_WIDGET_CATEGORY_PREFIX}{label}\n"
 
 
 def _process_message(
@@ -444,7 +463,7 @@ def _process_message(
             if products_by_product:
                 for product_name, product_results in products_by_product.items():
                     if not product_results.empty:
-                        response_parts.append(f"\n**{product_name.capitalize()}:**")
+                        response_parts.append(_widget_category_line(product_name))
                         for _, r in product_results.iterrows():
                             response_parts.append(_format_product_card(r))
             
@@ -555,7 +574,7 @@ def _process_message(
     
     if filtered_products_by_name:
         for product_name, filtered_products in filtered_products_by_name.items():
-            response_parts.append(f"\n**{product_name.capitalize()}:**")
+            response_parts.append(_widget_category_line(product_name))
             for r in filtered_products:
                 response_parts.append(_format_product_card(pd.Series(r)))
     

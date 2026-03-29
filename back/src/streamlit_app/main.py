@@ -108,7 +108,7 @@ def increment_llm_counter(function_name: str = "Unknown", prompt_preview: str = 
     pass
 
 
-def update_llm_response(response_preview: str = None):
+def update_llm_response(response_preview: str = None, prompt_tokens=None, completion_tokens=None):
     """Заглушка - логирование происходит в widget/app/chat_api.py"""
     pass
 
@@ -126,14 +126,28 @@ llm_request_count = logs.get("llm_request_count", 0)
 
 # Подсчитываем статистику
 total_llm_calls = sum(len(ur.get("llm_requests", [])) for ur in user_requests)
+total_cost_usd = sum(
+    llm.get("cost_usd", 0)
+    for ur in user_requests
+    for llm in ur.get("llm_requests", [])
+)
+total_tokens = sum(
+    (llm.get("prompt_tokens") or 0) + (llm.get("completion_tokens") or 0)
+    for ur in user_requests
+    for llm in ur.get("llm_requests", [])
+)
 
 # Статистика вверху
 st.subheader("📈 Общая статистика")
-col1, col2 = st.columns(2)
+col1, col2, col3, col4 = st.columns(4)
 with col1:
     st.metric("Запросов пользователя", len(user_requests))
 with col2:
     st.metric("Вызовов LLM всего", total_llm_calls)
+with col3:
+    st.metric("Токенов всего", f"{total_tokens:,}")
+with col4:
+    st.metric("Стоимость всего", f"${total_cost_usd:.4f}")
 
 st.divider()
 
@@ -157,18 +171,27 @@ if user_requests and len(user_requests) > 0:
             
             # Подсчитываем статистику для этого запроса
             total = len(llm_requests)
-            
+            req_cost = sum(r.get("cost_usd", 0) for r in llm_requests)
+            req_tokens = sum((r.get("prompt_tokens") or 0) + (r.get("completion_tokens") or 0) for r in llm_requests)
+
             # Форматируем время запроса
             timestamp = user_req.get("timestamp", time.time())
             time_str = time.strftime("%H:%M:%S", time.localtime(timestamp))
-            
+
+            cost_str = f"${req_cost:.4f}" if req_cost else ""
+            tokens_str = f"{req_tokens:,} токенов" if req_tokens else ""
+            meta = " | ".join(filter(None, [f"LLM: {total}", tokens_str, cost_str, time_str]))
+
             # Создаем expander для каждого запроса пользователя
             with st.expander(
-                f"💬 {user_req.get('user_message', 'Неизвестный запрос')} | Вызовов LLM: {total} | {time_str}",
+                f"💬 {user_req.get('user_message', 'Неизвестный запрос')} | {meta}",
                 expanded=False
             ):
                 # Статистика для этого запроса пользователя
-                st.caption(f"📊 Статистика запроса: {total} вызовов LLM")
+                sc1, sc2, sc3 = st.columns(3)
+                sc1.metric("Вызовов LLM", total)
+                sc2.metric("Токенов", f"{req_tokens:,}" if req_tokens else "—")
+                sc3.metric("Стоимость", f"${req_cost:.4f}" if req_cost else "—")
                 st.divider()
                 # Отображаем каждый вызов LLM
                 for llm_req in llm_requests:
@@ -190,8 +213,15 @@ if user_requests and len(user_requests) > 0:
                     else:
                         duration_display = 'Выполняется...'
                         status_badge = "⏳"
-                    
-                    st.markdown(f"**{status_badge} `{llm_req.get('function', 'Unknown')}`** ({duration_display}) | ID: #{llm_req.get('id', 'N/A')}")
+
+                    pt = llm_req.get("prompt_tokens")
+                    ct = llm_req.get("completion_tokens")
+                    call_cost = llm_req.get("cost_usd")
+                    usage_str = ""
+                    if pt is not None:
+                        usage_str = f" | {pt}↑ {ct}↓ tok | ${call_cost:.5f}"
+
+                    st.markdown(f"**{status_badge} `{llm_req.get('function', 'Unknown')}`** ({duration_display}){usage_str} | ID: #{llm_req.get('id', 'N/A')}")
                     
                     col_prompt, col_response = st.columns(2)
                     

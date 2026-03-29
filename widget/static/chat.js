@@ -49,6 +49,13 @@
     while (i < lines.length) {
       var line = lines[i].trim();
       
+      // Служебная метка категории с бэкенда (не дублирует markdown-заголовок)
+      if (line.indexOf("__WS_CAT__") === 0) {
+        currentCategory = line.substring("__WS_CAT__".length).trim() || "Товары";
+        i++;
+        continue;
+      }
+      
       // Определяем категорию товаров (формат: **Категория:** или просто "Категория")
       if (line.indexOf("**") === 0 && line.lastIndexOf("**") > 0) {
         var categoryMatch = line.match(/\*\*([^*]+)\*\*/);
@@ -434,6 +441,18 @@
     return text.replace(/[&<>"']/g, function(m) { return map[m]; });
   }
 
+  /** Начало блока товаров: самый ранний из маркеров (вступление не включает __WS_CAT__). */
+  function findProductBlockStart(text) {
+    var best = -1;
+    var markers = ["\n__WS_CAT__", "\n🛒", "\n•"];
+    for (var mi = 0; mi < markers.length; mi++) {
+      var p = text.indexOf(markers[mi]);
+      if (p !== -1 && (best === -1 || p < best)) best = p;
+    }
+    if (text.indexOf("__WS_CAT__") === 0) best = best === -1 ? 0 : Math.min(best, 0);
+    return best;
+  }
+
   function markdownToHtml(text) {
     if (!text) return "";
     
@@ -476,23 +495,10 @@
     
     if (products.length > 0 && role === "bot") {
       // Разделяем текст на части: до товаров и товары
-      // Ищем начало товаров (🛒 или •)
       var textBeforeProducts = text;
-      var productStartIndex = -1;
-      
-      // Ищем начало блока с товарами
-      var productMarkers = [
-        "\n🛒",
-        "\n•"
-      ];
-      
-      for (var m = 0; m < productMarkers.length; m++) {
-        var markerIndex = text.indexOf(productMarkers[m]);
-        if (markerIndex !== -1) {
-          productStartIndex = markerIndex;
-          textBeforeProducts = text.substring(0, markerIndex).trim();
-          break;
-        }
+      var productStartIndex = findProductBlockStart(text);
+      if (productStartIndex !== -1) {
+        textBeforeProducts = text.substring(0, productStartIndex).trim();
       }
       
       // Если не нашли маркер, но есть товары, удаляем их из текста
@@ -514,6 +520,10 @@
             if (categoryStart !== -1) {
               lineStart = categoryStart;
             }
+          }
+          var wsCatAt = text.lastIndexOf("\n__WS_CAT__", nameIndex);
+          if (wsCatAt !== -1 && (lineStart === -1 || wsCatAt < lineStart)) {
+            lineStart = wsCatAt;
           }
           textBeforeProducts = text.substring(0, lineStart).trim();
         }

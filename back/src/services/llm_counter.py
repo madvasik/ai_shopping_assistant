@@ -37,17 +37,20 @@ def increment_llm_counter(function_name: str = "Unknown", prompt_preview: Option
             # Игнорируем ошибки, если callback не может быть выполнен
             pass
 
-def update_llm_response(response_preview: Optional[str] = None):
+def update_llm_response(response_preview: Optional[str] = None,
+                        prompt_tokens: Optional[int] = None,
+                        completion_tokens: Optional[int] = None):
     """
     Обновляет ответ в последней записи лога запросов к LLM
-    
+
     Args:
         response_preview: Полный текст ответа (без обрезки)
+        prompt_tokens: Количество токенов в запросе (из resp.usage)
+        completion_tokens: Количество токенов в ответе (из resp.usage)
     """
     global _llm_response_callback
     if _llm_response_callback is not None:
         try:
-            _llm_response_callback(response_preview or "N/A")
+            _llm_response_callback(response_preview or "N/A", prompt_tokens, completion_tokens)
         except Exception:
-            # Игнорируем ошибки, если callback не может быть выполнен
             pass
