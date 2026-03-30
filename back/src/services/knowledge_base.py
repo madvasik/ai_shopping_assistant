@@ -6,6 +6,7 @@ from typing import Optional
 import os
 import pandas as pd
 from .llm_counter import increment_llm_counter, update_llm_response, extract_usage_tokens
+from .network_utils import is_network_error
 
 __all__ = ["CatalogKB"]
 
@@ -101,7 +102,9 @@ class CatalogKB:
             pt, ct = extract_usage_tokens(resp)
             update_llm_response(response_text, prompt_tokens=pt, completion_tokens=ct)
             return response_text
-        except Exception:
+        except Exception as e:
+            if is_network_error(e):
+                raise
             return None
 
     def answer_consultation(self, question: str) -> str:

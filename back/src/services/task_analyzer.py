@@ -6,6 +6,7 @@ from typing import List, Dict, Optional, Any
 import os, json
 import re
 from .llm_counter import increment_llm_counter, update_llm_response, extract_usage_tokens
+from .network_utils import is_network_error
 
 def _get_openai_client():
     """Получает клиент OpenAI API"""
@@ -216,9 +217,10 @@ def get_required_products_for_task(task_description: str) -> Dict[str, Any]:
             update_llm_response(f"{text}\n\n[ОШИБКА ПАРСИНГА JSON: {e}]")
             pass
     except Exception as e:
+        if is_network_error(e):
+            raise
         # Логируем общую ошибку
         print(f"[DEBUG] Exception in get_required_products_for_task: {e}")
-        pass
     
     # Значение по умолчанию - возвращаем пустой объект
     return {"text": "", "products": []}
@@ -310,5 +312,7 @@ def should_ask_clarification(task_description: str, conversation_history: List[D
             return text
         
         return None
-    except Exception:
+    except Exception as e:
+        if is_network_error(e):
+            raise
         return None

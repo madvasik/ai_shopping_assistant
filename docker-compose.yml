@@ -19,4 +19,5 @@ services:
       - ./widget:/app/widget
       # Опционально: монтируем данные, если хотите обновлять их без пересборки
       - ./back/database:/app/back/database:ro
+      - ./logs.db:/app/logs.db
     restart: unless-stopped

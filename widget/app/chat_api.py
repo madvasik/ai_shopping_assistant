@@ -4,12 +4,14 @@ API для обработки сообщений чата на базе серв
 """
 import os
 import sys
-import json
 import time
+import logging
 import pandas as pd
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 # Добавляем путь к сервисам
 # widget/app/chat_api.py -> widget/ -> ai-commercial-chatbot/ -> back/
@@ -33,16 +35,15 @@ from src.services.task_analyzer import (
     should_ask_clarification,
 )
 from src.services.llm_counter import set_llm_counter_callback, set_llm_response_callback
+from src.services.network_utils import is_network_error, log_network_error, NETWORK_ERROR_REPLY
+from src.services import logs_db
 
 # Загружаем переменные окружения
 load_dotenv()
 
-# Путь к файлу логов (общий для виджета и Streamlit)
-LOGS_FILE = PROJECT_ROOT / "llm_logs.json"
-
 # Глобальная переменная для отслеживания текущего запроса пользователя
 _current_user_message: Optional[str] = None
-_current_user_message_id: Optional[int] = None
+_current_user_request_id: Optional[int] = None
 
 # Глобальные переменные для кэширования
 _retriever: Optional[Retriever] = None
@@ -88,197 +89,68 @@ def _get_products_table_name() -> str:
     return os.getenv("PRODUCTS_TABLE", "products")
 
 
-def _load_logs() -> Dict[str, Any]:
-    """Загружает логи из файла"""
-    if not LOGS_FILE.exists():
-        return {"user_requests": [], "llm_request_count": 0}
-    try:
-        with open(LOGS_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            # Миграция старого формата - всегда удаляем старый формат
-            if "llm_requests_log" in data:
-                # Конвертируем старый формат в новый только если нет нового формата
-                if "user_requests" not in data or not data.get("user_requests"):
-                    user_requests = []
-                    current_group = None
-                    for req in data.get("llm_requests_log", []):
-                        # Если нет группы, создаем новую
-                        if current_group is None or req.get("id", 0) <= current_group.get("last_llm_id", 0):
-                            current_group = {
-                                "id": len(user_requests) + 1,
-                                "user_message": "Неизвестный запрос",
-                                "timestamp": req.get("start_time", time.time()),
-                                "llm_requests": []
-                            }
-                            user_requests.append(current_group)
-                        current_group["llm_requests"].append(req)
-                        current_group["last_llm_id"] = req.get("id", 0)
-                    data["user_requests"] = user_requests
-                # Всегда удаляем старый формат
-                del data["llm_requests_log"]
-            # Убеждаемся, что есть нужные ключи
-            if "user_requests" not in data:
-                data["user_requests"] = []
-            if "llm_request_count" not in data:
-                data["llm_request_count"] = 0
-            return data
-    except Exception:
-        return {"user_requests": [], "llm_request_count": 0}
-
-
-def _save_logs(logs: Dict[str, Any]):
-    """Сохраняет логи в файл"""
-    try:
-        # Удаляем старый формат перед сохранением
-        if "llm_requests_log" in logs:
-            del logs["llm_requests_log"]
-        # Убеждаемся, что есть нужные ключи
-        if "user_requests" not in logs:
-            logs["user_requests"] = []
-        if "llm_request_count" not in logs:
-            logs["llm_request_count"] = 0
-        with open(LOGS_FILE, "w", encoding="utf-8") as f:
-            json.dump(logs, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        raise  # Пробрасываем ошибку для отладки
-
-
 def _increment_llm_counter(function_name: str = "Unknown", prompt_preview: str = None):
-    """Callback для увеличения счетчика запросов к LLM и логирования"""
+    """Callback для увеличения счетчика запросов к LLM и логирования в SQLite."""
     try:
-        global _current_user_message, _current_user_message_id
-        
-        logs = _load_logs()
-        # Удаляем старый формат сразу после загрузки
-        if "llm_requests_log" in logs:
-            del logs["llm_requests_log"]
-        logs["llm_request_count"] = logs.get("llm_request_count", 0) + 1
-        
+        global _current_user_message, _current_user_request_id
+
         # Извлекаем System и User промпты из полного промпта
         system_prompt = ""
         user_prompt = prompt_preview or "N/A"
-        
+
         if "System:" in user_prompt and "User:" in user_prompt:
-            # Разделяем на System и User промпты
             parts = user_prompt.split("User:", 1)
             if len(parts) == 2:
                 system_prompt = parts[0].replace("System:", "").strip()
                 user_prompt = parts[1].strip()
-        
-        request_entry = {
-            "id": logs["llm_request_count"],
-            "function": function_name,
-            "system_prompt": system_prompt,  # Сохраняем System промпт
-            "user_prompt": user_prompt,  # Сохраняем User промпт
-            "original_user_message": _current_user_message or "N/A",  # Сохраняем оригинальный вопрос пользователя
-            "response_preview": None,
-            "start_time": time.time(),
-            "duration": None
-        }
-        
-        # Находим или создаем группу для текущего запроса пользователя
-        if "user_requests" not in logs:
-            logs["user_requests"] = []
-        
-        # Ищем последнюю группу с текущим сообщением пользователя
-        user_request = None
-        if _current_user_message:
-            # Если ID установлен, ищем группу по ID
-            if _current_user_message_id is not None:
-                for ur in logs["user_requests"]:
-                    if ur.get("id") == _current_user_message_id:
-                        user_request = ur
-                        break
-            
-            # Если группа не найдена по ID, ищем последнюю группу с таким же сообщением
-            if user_request is None:
-                for ur in reversed(logs["user_requests"]):
-                    if ur.get("user_message") == _current_user_message:
-                        user_request = ur
-                        _current_user_message_id = user_request.get("id")
-                        break
-        
-        # Если группа не найдена, создаем новую
-        if user_request is None:
-            user_request = {
-                "id": len(logs["user_requests"]) + 1,
-                "user_message": _current_user_message or "Неизвестный запрос",
-                "timestamp": time.time(),
-                "llm_requests": []
-            }
-            logs["user_requests"].append(user_request)
-            _current_user_message_id = user_request["id"]
-        
-        # Добавляем запрос к LLM в группу
-        user_request["llm_requests"].append(request_entry)
-        
-        # Ограничиваем размер лога (последние 20 запросов пользователя)
-        if len(logs["user_requests"]) > 20:
-            logs["user_requests"] = logs["user_requests"][-20:]
-        
-        _save_logs(logs)
-    except Exception as e:
-        pass  # Ошибки логируются в Streamlit через llm_logs.json
+
+        # Находим или создаём группу
+        if _current_user_request_id is None and _current_user_message:
+            found = logs_db.find_last_user_request_by_message(_current_user_message)
+            if found:
+                _current_user_request_id = found["id"]
+
+        if _current_user_request_id is None:
+            _current_user_request_id = logs_db.add_user_request(
+                _current_user_message or "Неизвестный запрос"
+            )
+
+        logs_db.add_llm_call(
+            user_request_id=_current_user_request_id,
+            function=function_name,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            original_user_message=_current_user_message or "N/A",
+        )
+    except Exception:
+        pass
 
 
 def _update_llm_response(response_preview: str = None,
                          prompt_tokens: int = None,
                          completion_tokens: int = None):
-    """Callback для обновления ответа в последней записи"""
-    global _current_user_message_id
+    """Callback для обновления ответа в последней записи (SQLite)."""
+    global _current_user_request_id
+    try:
+        ur_id = _current_user_request_id
+        if ur_id is None:
+            return
 
-    logs = _load_logs()
-    if not logs.get("user_requests"):
-        return
-
-    # Находим группу по ID или последнюю группу
-    user_request = None
-    if _current_user_message_id is not None:
-        for ur in logs["user_requests"]:
-            if ur.get("id") == _current_user_message_id:
-                user_request = ur
-                break
-
-    if user_request is None and logs["user_requests"]:
-        user_request = logs["user_requests"][-1]
-
-    if user_request and user_request.get("llm_requests"):
-        entry_to_update = None
-        # FIFO: при двух подряд increment без update ответ первого API должен попасть в первую запись (LIFO ломал токены).
-        for entry in user_request["llm_requests"]:
-            if entry.get("duration") is None and entry.get("start_time") is not None:
-                entry_to_update = entry
-                break
-
-        if entry_to_update is None and len(user_request["llm_requests"]) > 0:
-            entry_to_update = user_request["llm_requests"][-1]
-
-        entry_to_update["response_preview"] = response_preview or "N/A"
-
+        cost_usd = None
         if prompt_tokens is not None or completion_tokens is not None:
-            pt = 0 if prompt_tokens is None else prompt_tokens
-            ct = 0 if completion_tokens is None else completion_tokens
-            entry_to_update["prompt_tokens"] = pt
-            entry_to_update["completion_tokens"] = ct
-            cost = pt * _INPUT_PRICE_PER_TOKEN + ct * _OUTPUT_PRICE_PER_TOKEN
-            entry_to_update["cost_usd"] = round(cost, 6)
+            pt = prompt_tokens or 0
+            ct = completion_tokens or 0
+            cost_usd = round(pt * _INPUT_PRICE_PER_TOKEN + ct * _OUTPUT_PRICE_PER_TOKEN, 6)
 
-        if "start_time" in entry_to_update and entry_to_update["start_time"] is not None:
-            end_time = time.time()
-            duration_seconds = end_time - entry_to_update["start_time"]
-
-            if duration_seconds < 1:
-                duration_str = f"{duration_seconds * 1000:.0f}мс"
-            elif duration_seconds < 60:
-                duration_str = f"{duration_seconds:.2f}с"
-            else:
-                minutes = int(duration_seconds // 60)
-                seconds = duration_seconds % 60
-                duration_str = f"{minutes}м {seconds:.1f}с"
-
-            entry_to_update["duration"] = duration_str
-
-    _save_logs(logs)
+        logs_db.update_llm_response(
+            user_request_id=ur_id,
+            response_preview=response_preview or "N/A",
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            cost_usd=cost_usd,
+        )
+    except Exception:
+        pass
 
 
 # Устанавливаем callback функции для логирования при импорте модуля
@@ -352,7 +224,7 @@ def _process_message(
     Returns:
         Текст ответа ассистента
     """
-    global _current_user_message, _current_user_message_id
+    global _current_user_message, _current_user_request_id
     
     # Устанавливаем текущее сообщение пользователя для группировки
     _current_user_message = message
@@ -600,6 +472,14 @@ def _process_message(
     return "\n".join(response_parts)
 
 
+def _save_network_error_to_log(error_type: str) -> None:
+    """Фиксирует сетевую ошибку в SQLite для отображения в Streamlit-панели."""
+    try:
+        logs_db.add_network_error(error_type)
+    except Exception:
+        pass
+
+
 def process_chat_request(
     message: str,
     conversation_history: Optional[List[Dict[str, str]]] = None,
@@ -614,7 +494,7 @@ def process_chat_request(
     Returns:
         Словарь с полем "reply" содержащим текст ответа
     """
-    global _current_user_message, _current_user_message_id
+    global _current_user_message, _current_user_request_id
     
     try:
         # Проверяем, является ли это ответом на уточняющий вопрос
@@ -625,21 +505,20 @@ def process_chat_request(
                     is_follow_up = True
                     break
         
-        # Загружаем логи для определения группы
-        logs = _load_logs()
-        
         # Устанавливаем текущее сообщение пользователя для группировки
         _current_user_message = message
-        
+
         # Если это ответ на уточняющий вопрос, используем ID последней группы
-        if is_follow_up and logs.get("user_requests"):
-            # Берем ID последней группы запросов пользователя
-            last_user_req = logs["user_requests"][-1]
-            _current_user_message_id = last_user_req.get("id")
-            # Используем оригинальное сообщение пользователя для группировки
-            _current_user_message = last_user_req.get("user_message", message)
+        if is_follow_up:
+            all_urs = logs_db.get_all_user_requests()
+            if all_urs:
+                last_ur = all_urs[0]  # новые первыми
+                _current_user_request_id = last_ur["id"]
+                _current_user_message = last_ur.get("user_message", message)
+            else:
+                _current_user_request_id = None
         else:
-            _current_user_message_id = None
+            _current_user_request_id = None
         
         # Убеждаемся, что callback установлены при каждом запросе
         set_llm_counter_callback(_increment_llm_counter)
@@ -652,15 +531,18 @@ def process_chat_request(
         
         # Сбрасываем текущее сообщение после обработки
         _current_user_message = None
-        _current_user_message_id = None
-        
+        _current_user_request_id = None
+
         return {"reply": reply}
     except Exception as e:
-        error_msg = f"Ошибка при обработке сообщения: {str(e)}"
-        # Сбрасываем текущее сообщение при ошибке
         _current_user_message = None
-        _current_user_message_id = None
-        return {"reply": error_msg}
+        _current_user_request_id = None
+        if is_network_error(e):
+            log_network_error(e, context="process_chat_request")
+            _save_network_error_to_log(type(e).__name__)
+            return {"reply": NETWORK_ERROR_REPLY}
+        logger.exception("Ошибка при обработке сообщения: %s", type(e).__name__)
+        return {"reply": f"Ошибка при обработке сообщения: {str(e)}"}
 
 
 # Устанавливаем callback функции для логирования в конце файла после определения всех функций

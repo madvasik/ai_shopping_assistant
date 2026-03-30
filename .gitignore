@@ -45,7 +45,11 @@ Thumbs.db
 
 # Logs
 *.log
+logs.db
 
 # Combined sources (may contain secrets)
 combined_sources.txt
 **/combined_sources.txt
+
+# Local planning notes
+TODO.md
