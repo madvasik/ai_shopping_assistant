@@ -60,7 +60,7 @@ st.markdown("""
 
 
 # Заглушки — логирование происходит в widget/app/chat_api.py
-def _noop_counter(function_name="Unknown", prompt_preview=None):
+def _noop_counter(function_name="Unknown", prompt_preview=None, prompt_name=None):
     pass
 
 def _noop_response(response_preview=None, prompt_tokens=None, completion_tokens=None):
@@ -181,7 +181,12 @@ if all_user_requests:
                 if pt is not None:
                     usage_str = f" | {pt}↑ {ct}↓ tok | ${call_cost:.5f}"
 
-                st.markdown(f"**{status_badge} `{llm_req.get('function', 'Unknown')}`** ({duration_display}){usage_str} | ID: #{llm_req.get('id', 'N/A')}")
+                prompt_name = llm_req.get("prompt_name") or ""
+                prompt_label = f" | prompt: `{prompt_name}`" if prompt_name else ""
+                st.markdown(
+                    f"**{status_badge} `{llm_req.get('function', 'Unknown')}`**"
+                    f"{prompt_label} ({duration_display}){usage_str} | ID: #{llm_req.get('id', 'N/A')}"
+                )
 
                 col_prompt, col_response = st.columns(2)
 

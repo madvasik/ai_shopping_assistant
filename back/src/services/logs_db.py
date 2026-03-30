@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-SQLite-хранилище логов LLM-запросов. Заменяет llm_logs.json.
+SQLite-хранилище логов LLM-запросов.
 
 Таблицы
 -------
@@ -61,6 +61,7 @@ def _init_tables(conn: sqlite3.Connection) -> None:
             id                      INTEGER PRIMARY KEY AUTOINCREMENT,
             user_request_id         INTEGER NOT NULL REFERENCES user_requests(id) ON DELETE CASCADE,
             function                TEXT    NOT NULL DEFAULT 'Unknown',
+            prompt_name             TEXT    NOT NULL DEFAULT '',
             system_prompt           TEXT    NOT NULL DEFAULT '',
             user_prompt             TEXT    NOT NULL DEFAULT '',
             original_user_message   TEXT    NOT NULL DEFAULT '',
@@ -80,6 +81,18 @@ def _init_tables(conn: sqlite3.Connection) -> None:
 
         CREATE INDEX IF NOT EXISTS idx_llm_calls_ur ON llm_calls(user_request_id);
     """)
+    _ensure_column(conn, "llm_calls", "prompt_name", "TEXT NOT NULL DEFAULT ''")
+
+
+def _ensure_column(conn: sqlite3.Connection, table_name: str, column_name: str, column_def: str) -> None:
+    columns = {
+        row["name"]
+        for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+    }
+    if column_name in columns:
+        return
+    conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_def}")
+    conn.commit()
 
 
 # ------------------------------------------------------------------
@@ -126,6 +139,7 @@ def _trim_user_requests(conn: sqlite3.Connection) -> None:
 def add_llm_call(
     user_request_id: int,
     function: str = "Unknown",
+    prompt_name: str = "",
     system_prompt: str = "",
     user_prompt: str = "",
     original_user_message: str = "",
@@ -135,10 +149,10 @@ def add_llm_call(
     conn = _get_conn()
     cur = conn.execute(
         """INSERT INTO llm_calls
-           (user_request_id, function, system_prompt, user_prompt,
+           (user_request_id, function, prompt_name, system_prompt, user_prompt,
             original_user_message, start_time)
-           VALUES (?, ?, ?, ?, ?, ?)""",
-        (user_request_id, function, system_prompt, user_prompt,
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (user_request_id, function, prompt_name, system_prompt, user_prompt,
          original_user_message, start_time or time.time()),
     )
     conn.commit()

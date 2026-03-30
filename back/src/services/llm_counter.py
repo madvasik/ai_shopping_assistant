@@ -3,7 +3,7 @@
 Модуль для подсчета запросов к LLM в рамках диалога.
 Использует глобальную callback функцию для совместимости с разными контекстами выполнения.
 """
-from typing import Optional, Callable, Dict, Any, Tuple
+from typing import Optional, Callable, Any, Tuple
 
 
 def extract_usage_tokens(completion: Any) -> Tuple[Optional[int], Optional[int]]:
@@ -33,11 +33,11 @@ def extract_usage_tokens(completion: Any) -> Tuple[Optional[int], Optional[int]]
     return pt, ct
 
 # Глобальная callback функция для увеличения счетчика и логирования запроса
-_llm_counter_callback: Optional[Callable[[str, Optional[str]], None]] = None
+_llm_counter_callback: Optional[Callable[[str, Optional[str], Optional[str]], None]] = None
 # Глобальная callback функция для обновления ответа в последней записи
 _llm_response_callback: Optional[Callable[[str], None]] = None
 
-def set_llm_counter_callback(callback: Optional[Callable[[str, Optional[str]], None]]):
+def set_llm_counter_callback(callback: Optional[Callable[[str, Optional[str], Optional[str]], None]]):
     """Устанавливает callback функцию для увеличения счетчика запросов к LLM и логирования"""
     global _llm_counter_callback
     _llm_counter_callback = callback
@@ -47,18 +47,23 @@ def set_llm_response_callback(callback: Optional[Callable[[str], None]]):
     global _llm_response_callback
     _llm_response_callback = callback
 
-def increment_llm_counter(function_name: str = "Unknown", prompt_preview: Optional[str] = None):
+def increment_llm_counter(
+    function_name: str = "Unknown",
+    prompt_preview: Optional[str] = None,
+    prompt_name: Optional[str] = None,
+):
     """
     Увеличивает счетчик запросов к LLM на 1 через callback функцию и логирует запрос
     
     Args:
         function_name: Название функции, которая делает запрос к LLM
         prompt_preview: Полный текст промпта (без обрезки)
+        prompt_name: Имя промпта из централизованного registry
     """
     global _llm_counter_callback
     if _llm_counter_callback is not None:
         try:
-            _llm_counter_callback(function_name, prompt_preview)
+            _llm_counter_callback(function_name, prompt_preview, prompt_name)
         except Exception:
             # Игнорируем ошибки, если callback не может быть выполнен
             pass

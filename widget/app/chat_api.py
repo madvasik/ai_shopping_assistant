@@ -89,7 +89,11 @@ def _get_products_table_name() -> str:
     return os.getenv("PRODUCTS_TABLE", "products")
 
 
-def _increment_llm_counter(function_name: str = "Unknown", prompt_preview: str = None):
+def _increment_llm_counter(
+    function_name: str = "Unknown",
+    prompt_preview: str = None,
+    prompt_name: Optional[str] = None,
+):
     """Callback для увеличения счетчика запросов к LLM и логирования в SQLite."""
     try:
         global _current_user_message, _current_user_request_id
@@ -118,6 +122,7 @@ def _increment_llm_counter(function_name: str = "Unknown", prompt_preview: str =
         logs_db.add_llm_call(
             user_request_id=_current_user_request_id,
             function=function_name,
+            prompt_name=prompt_name or "",
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             original_user_message=_current_user_message or "N/A",

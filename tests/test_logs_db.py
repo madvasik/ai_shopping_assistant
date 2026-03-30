@@ -56,6 +56,7 @@ def test_update_llm_response_updates_oldest_open_call_and_stats(isolated_logs_db
     first_call_id = logs_db.add_llm_call(
         user_request_id=user_request_id,
         function="classify",
+        prompt_name="classify_intent",
         system_prompt="sys",
         user_prompt="user",
         original_user_message="нужна краска",
@@ -80,6 +81,7 @@ def test_update_llm_response_updates_oldest_open_call_and_stats(isolated_logs_db
     calls = rows[0]["llm_requests"]
 
     assert [call["id"] for call in calls] == [first_call_id, second_call_id]
+    assert calls[0]["prompt_name"] == "classify_intent"
     assert calls[0]["response_preview"] == "готово"
     assert calls[0]["prompt_tokens"] == 10
     assert calls[0]["completion_tokens"] == 5

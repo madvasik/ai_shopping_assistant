@@ -7,13 +7,13 @@ from src.services import llm_counter
 def test_increment_llm_counter_invokes_callback():
     calls = []
 
-    def cb(name, preview):
-        calls.append((name, preview))
+    def cb(name, preview, prompt_name=None):
+        calls.append((name, preview, prompt_name))
 
     llm_counter.set_llm_counter_callback(cb)
     llm_counter.set_llm_response_callback(None)
-    llm_counter.increment_llm_counter("classify_intent", "user: hello")
-    assert calls == [("classify_intent", "user: hello")]
+    llm_counter.increment_llm_counter("classify_intent", "user: hello", "classify_intent")
+    assert calls == [("classify_intent", "user: hello", "classify_intent")]
 
 
 def test_update_llm_response_invokes_callback():
