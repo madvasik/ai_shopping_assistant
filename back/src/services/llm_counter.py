@@ -3,7 +3,34 @@
 Модуль для подсчета запросов к LLM в рамках диалога.
 Использует глобальную callback функцию для совместимости с разными контекстами выполнения.
 """
-from typing import Optional, Callable, Dict, Any
+from typing import Optional, Callable, Dict, Any, Tuple
+
+
+def extract_usage_tokens(completion: Any) -> Tuple[Optional[int], Optional[int]]:
+    """
+    Достаёт prompt/completion tokens из ответа chat.completions.create.
+    Учитывает разные формы объекта usage (dict / pydantic, input_tokens и т.д.).
+    """
+    u = getattr(completion, "usage", None)
+    if u is None:
+        return None, None
+    pt: Optional[int] = None
+    ct: Optional[int] = None
+    if isinstance(u, dict):
+        pt = u.get("prompt_tokens")
+        ct = u.get("completion_tokens")
+        if pt is None:
+            pt = u.get("input_tokens")
+        if ct is None:
+            ct = u.get("output_tokens")
+    else:
+        pt = getattr(u, "prompt_tokens", None)
+        ct = getattr(u, "completion_tokens", None)
+        if pt is None and hasattr(u, "input_tokens"):
+            pt = getattr(u, "input_tokens", None)
+        if ct is None and hasattr(u, "output_tokens"):
+            ct = getattr(u, "output_tokens", None)
+    return pt, ct
 
 # Глобальная callback функция для увеличения счетчика и логирования запроса
 _llm_counter_callback: Optional[Callable[[str, Optional[str]], None]] = None

@@ -152,6 +152,15 @@ def test_is_catalog_related_no_client(monkeypatch):
     assert is_catalog_related("краска") is False
 
 
+def test_is_catalog_related_heuristic_curtains_without_llm(monkeypatch):
+    """Монтаж штор — в тематике строймага; эвристика до LLM (в т.ч. без API)."""
+    monkeypatch.setattr(
+        "src.services.intent_classifier._get_openai_client",
+        lambda: (None, "x"),
+    )
+    assert is_catalog_related("как повесить шторы?") is True
+
+
 def test_is_catalog_related_da(monkeypatch):
     c = openai_client_returning("да")
     monkeypatch.setattr(

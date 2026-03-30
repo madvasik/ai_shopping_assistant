@@ -5,7 +5,7 @@
 from typing import List, Dict, Optional, Any
 import os, json
 import re
-from .llm_counter import increment_llm_counter, update_llm_response
+from .llm_counter import increment_llm_counter, update_llm_response, extract_usage_tokens
 
 def _get_openai_client():
     """Получает клиент OpenAI API"""
@@ -146,9 +146,8 @@ def get_required_products_for_task(task_description: str) -> Dict[str, Any]:
             ],
         )
         text = (resp.choices[0].message.content or "").strip()
-        update_llm_response(text,
-            prompt_tokens=resp.usage.prompt_tokens if resp.usage else None,
-            completion_tokens=resp.usage.completion_tokens if resp.usage else None)
+        pt, ct = extract_usage_tokens(resp)
+        update_llm_response(text, prompt_tokens=pt, completion_tokens=ct)
 
         # Извлекаем JSON из ответа
         # Удаляем markdown код блоки если есть
@@ -299,9 +298,8 @@ def should_ask_clarification(task_description: str, conversation_history: List[D
             ],
         )
         text = (resp.choices[0].message.content or "").strip()
-        update_llm_response(text,
-            prompt_tokens=resp.usage.prompt_tokens if resp.usage else None,
-            completion_tokens=resp.usage.completion_tokens if resp.usage else None)
+        pt, ct = extract_usage_tokens(resp)
+        update_llm_response(text, prompt_tokens=pt, completion_tokens=ct)
 
         # Если ответ содержит "НЕТ" или похожее, возвращаем None
         if any(word in text.upper() for word in ["НЕТ", "НЕ НУЖЕН", "НЕ НУЖНО", "НЕ ТРЕБУЕТСЯ"]):

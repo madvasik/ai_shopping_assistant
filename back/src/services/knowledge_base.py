@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Optional
 import os
 import pandas as pd
-from .llm_counter import increment_llm_counter, update_llm_response
+from .llm_counter import increment_llm_counter, update_llm_response, extract_usage_tokens
 
 __all__ = ["CatalogKB"]
 
@@ -98,11 +98,8 @@ class CatalogKB:
                 ],
             )
             response_text = (resp.choices[0].message.content or "").strip()
-            update_llm_response(
-                response_text,
-                prompt_tokens=resp.usage.prompt_tokens if resp.usage else None,
-                completion_tokens=resp.usage.completion_tokens if resp.usage else None,
-            )
+            pt, ct = extract_usage_tokens(resp)
+            update_llm_response(response_text, prompt_tokens=pt, completion_tokens=ct)
             return response_text
         except Exception:
             return None

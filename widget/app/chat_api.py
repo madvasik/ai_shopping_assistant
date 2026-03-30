@@ -244,7 +244,8 @@ def _update_llm_response(response_preview: str = None,
 
     if user_request and user_request.get("llm_requests"):
         entry_to_update = None
-        for entry in reversed(user_request["llm_requests"]):
+        # FIFO: при двух подряд increment без update ответ первого API должен попасть в первую запись (LIFO ломал токены).
+        for entry in user_request["llm_requests"]:
             if entry.get("duration") is None and entry.get("start_time") is not None:
                 entry_to_update = entry
                 break
@@ -254,10 +255,12 @@ def _update_llm_response(response_preview: str = None,
 
         entry_to_update["response_preview"] = response_preview or "N/A"
 
-        if prompt_tokens is not None:
-            entry_to_update["prompt_tokens"] = prompt_tokens
-            entry_to_update["completion_tokens"] = completion_tokens or 0
-            cost = prompt_tokens * _INPUT_PRICE_PER_TOKEN + (completion_tokens or 0) * _OUTPUT_PRICE_PER_TOKEN
+        if prompt_tokens is not None or completion_tokens is not None:
+            pt = 0 if prompt_tokens is None else prompt_tokens
+            ct = 0 if completion_tokens is None else completion_tokens
+            entry_to_update["prompt_tokens"] = pt
+            entry_to_update["completion_tokens"] = ct
+            cost = pt * _INPUT_PRICE_PER_TOKEN + ct * _OUTPUT_PRICE_PER_TOKEN
             entry_to_update["cost_usd"] = round(cost, 6)
 
         if "start_time" in entry_to_update and entry_to_update["start_time"] is not None:

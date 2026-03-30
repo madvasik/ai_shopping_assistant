@@ -135,6 +135,11 @@ total_tokens = sum(
     for ur in user_requests
     for llm in ur.get("llm_requests", [])
 )
+any_usage_logged = any(
+    llm.get("prompt_tokens") is not None or llm.get("completion_tokens") is not None
+    for ur in user_requests
+    for llm in ur.get("llm_requests", [])
+)
 
 # Статистика вверху
 st.subheader("📈 Общая статистика")
@@ -144,9 +149,15 @@ with col1:
 with col2:
     st.metric("Вызовов LLM всего", total_llm_calls)
 with col3:
-    st.metric("Токенов всего", f"{total_tokens:,}")
+    st.metric(
+        "Токенов всего",
+        f"{total_tokens:,}" if any_usage_logged else "—",
+    )
 with col4:
-    st.metric("Стоимость всего", f"${total_cost_usd:.4f}")
+    st.metric(
+        "Стоимость всего",
+        f"${total_cost_usd:.4f}" if any_usage_logged else "—",
+    )
 
 st.divider()
 
@@ -172,13 +183,17 @@ if user_requests and len(user_requests) > 0:
             total = len(llm_requests)
             req_cost = sum(r.get("cost_usd", 0) for r in llm_requests)
             req_tokens = sum((r.get("prompt_tokens") or 0) + (r.get("completion_tokens") or 0) for r in llm_requests)
+            req_has_usage = any(
+                r.get("prompt_tokens") is not None or r.get("completion_tokens") is not None
+                for r in llm_requests
+            )
 
             # Форматируем время запроса
             timestamp = user_req.get("timestamp", time.time())
             time_str = time.strftime("%H:%M:%S", time.localtime(timestamp))
 
-            cost_str = f"${req_cost:.4f}" if req_cost else ""
-            tokens_str = f"{req_tokens:,} токенов" if req_tokens else ""
+            cost_str = f"${req_cost:.4f}" if req_has_usage and req_cost else ""
+            tokens_str = f"{req_tokens:,} токенов" if req_has_usage else ""
             meta = " | ".join(filter(None, [f"LLM: {total}", tokens_str, cost_str, time_str]))
 
             # Создаем expander для каждого запроса пользователя
@@ -189,8 +204,8 @@ if user_requests and len(user_requests) > 0:
                 # Статистика для этого запроса пользователя
                 sc1, sc2, sc3 = st.columns(3)
                 sc1.metric("Вызовов LLM", total)
-                sc2.metric("Токенов", f"{req_tokens:,}" if req_tokens else "—")
-                sc3.metric("Стоимость", f"${req_cost:.4f}" if req_cost else "—")
+                sc2.metric("Токенов", f"{req_tokens:,}" if req_has_usage else "—")
+                sc3.metric("Стоимость", f"${req_cost:.4f}" if req_has_usage else "—")
                 st.divider()
                 # Отображаем каждый вызов LLM
                 for llm_req in llm_requests:

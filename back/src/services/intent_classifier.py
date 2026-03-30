@@ -1,7 +1,38 @@
 # -*- coding: utf-8 -*-
-import os, json
-from typing import Dict, Any, List
-from .llm_counter import increment_llm_counter, update_llm_response
+import os, json, re
+from typing import Dict, Any, List, Optional
+from .llm_counter import increment_llm_counter, update_llm_response, extract_usage_tokens
+
+# Монтаж на стену/потолок + типичные предметы (строймаг продаёт крепёж, карнизы, инструмент).
+_RE_CATALOG_MOUNT_VERB = re.compile(
+    r"повесить|повесь|веша(?:ть|ю|ем|ете|т)|весить|установ|прикреп|смонтиров|навесить|закреп"
+    r"|креплен|монтаж|просверл|забур|дюбел",
+    re.IGNORECASE,
+)
+_RE_CATALOG_MOUNT_OBJECT = re.compile(
+    r"штор|карниз|гардин|жалюзи|тюль|полк|зеркал|картин|люстр|светильник|кронштейн",
+    re.IGNORECASE,
+)
+
+
+def _heuristic_catalog_related(query: str) -> bool:
+    if not query or len(query.strip()) < 2:
+        return False
+    return bool(
+        _RE_CATALOG_MOUNT_VERB.search(query) and _RE_CATALOG_MOUNT_OBJECT.search(query)
+    )
+
+
+def _parse_yes_no_ru(text: str) -> Optional[bool]:
+    """Первое слово да/нет; иначе None (нужен запасной разбор)."""
+    if not text:
+        return None
+    first = re.split(r"[\s.,;:!?«»\"]+", text.strip().lower(), maxsplit=1)[0]
+    if first in ("да", "yes"):
+        return True
+    if first in ("нет", "no"):
+        return False
+    return None
 
 
 def _get_openai_client():
@@ -88,9 +119,8 @@ def classify_intent(messages: List[Dict[str,str]],
             ],
         )
         text = (resp.choices[0].message.content or "").strip().lower()
-        update_llm_response(text,
-            prompt_tokens=resp.usage.prompt_tokens if resp.usage else None,
-            completion_tokens=resp.usage.completion_tokens if resp.usage else None)
+        pt, ct = extract_usage_tokens(resp)
+        update_llm_response(text, prompt_tokens=pt, completion_tokens=ct)
         if "consultation" in text:
             return "consultation"
         elif "task" in text:
@@ -104,12 +134,16 @@ def classify_intent(messages: List[Dict[str,str]],
 
 def is_catalog_related(query: str) -> bool:
     """
-    Проверяет, относится ли вопрос к каталогу, используя только LLM.
-    Возвращает True, если вопрос релевантен каталогу строительного магазина.
+    Проверяет, относится ли вопрос к каталогу строительного магазина.
+    Сначала эвристика (устойчиво к ошибкам LLM на типичных запросах про монтаж),
+    затем при необходимости — LLM.
     """
     if not query:
         return False
-    
+
+    if _heuristic_catalog_related(query):
+        return True
+
     # Используем LLM для проверки релевантности
     client, err = _get_openai_client()
     if err or client is None:
@@ -123,14 +157,22 @@ def is_catalog_related(query: str) -> bool:
         "кабель, автоматы и УЗО, электрощиты, розетки и выключатели, светильники и лампы для монтажа, крепёж и инструмент для электрики и т.п. "
         "Это могут быть материалы (краски, обои, клей, плитка, утеплители и т.д.), инструменты (для ремонта, садовые и т.д.), "
         "а также товары для садоводства и дачи (удобрения, семена, садовый инвентарь и т.д.).\n\n"
-        "Определи сам, продаются ли товары, относящиеся к вопросу пользователя, в строительном магазине. "
-        "Если вопрос касается товаров, которые обычно продаются в строительных магазинах - ответь 'да'. "
-        "Если вопрос касается товаров, которые НЕ продаются в строительных магазинах (например, бытовая техника, "
-        "электроника, мебель, еда, программирование и т.д.) - ответь 'нет'.\n\n"
+        "ВАЖНО про монтаж и «как сделать»:\n"
+        "- Вопросы «как повесить/установить/прикрепить» что-либо к стене, потолку или оконному проёму (шторы, карниз, полка, светильник, полотенцесушитель и т.п.) "
+        "считай относящимися к магазину: для этого обычно нужны карнизы и комплектующие, кронштейны, дюбели, саморезы, анкеры, перфоратор или дрель, бур, отвёртка, уровень — всё это продаётся в строительном магазине.\n"
+        "- Сам предмет (например ткань штор) может не продаваться, но вопрос про крепление и инструменты для работы — всё равно «да».\n\n"
+        "Определи сам, есть ли связь с товарами или работами, типичными для строительного магазина. "
+        "Если да — ответь строго слово 'да'. "
+        "Если вопрос явно про то, что не связано с ремонтом, стройкой, монтажом и таким ассортиментом (еда, медицина, программирование, "
+        "подбор готовой мебели без монтажа, развлечения и т.д.) — ответь строго слово 'нет'.\n\n"
         "Ответь ТОЛЬКО 'да' или 'нет', без объяснений."
     )
     
-    user_prompt = f"Вопрос пользователя: {query}\n\nОтносится ли этот вопрос к тематике строительного онлайн магазина?"
+    user_prompt = (
+        f"Вопрос пользователя: {query}\n\n"
+        "Относится ли этот вопрос к тематике строительного онлайн магазина? "
+        "Учитывай монтаж, крепёж и инструменты, как в инструкции выше."
+    )
     model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
     
     # Формируем полный запрос для логирования
@@ -148,11 +190,14 @@ def is_catalog_related(query: str) -> bool:
                 {"role": "user", "content": user_prompt},
             ],
         )
-        text = (resp.choices[0].message.content or "").strip().lower()
-        update_llm_response(text,
-            prompt_tokens=resp.usage.prompt_tokens if resp.usage else None,
-            completion_tokens=resp.usage.completion_tokens if resp.usage else None)
-        return "да" in text
+        text = (resp.choices[0].message.content or "").strip()
+        pt, ct = extract_usage_tokens(resp)
+        update_llm_response(text, prompt_tokens=pt, completion_tokens=ct)
+        parsed = _parse_yes_no_ru(text)
+        if parsed is not None:
+            return parsed
+        low = text.lower()
+        return "да" in low
     except Exception:
         # Значение по умолчанию при ошибке
         return False
@@ -225,9 +270,8 @@ def extract_product_names_from_query(query: str,
                 text = text[4:]
             text = text.strip()
 
-        update_llm_response(text,
-            prompt_tokens=resp.usage.prompt_tokens if resp.usage else None,
-            completion_tokens=resp.usage.completion_tokens if resp.usage else None)
+        pt, ct = extract_usage_tokens(resp)
+        update_llm_response(text, prompt_tokens=pt, completion_tokens=ct)
         
         # Извлекаем JSON массив
         if text.startswith("["):
@@ -335,9 +379,8 @@ def check_products_relevance(category_name: str, products: List[Dict[str, Any]],
             ],
         )
         text = (resp.choices[0].message.content or "").strip()
-        update_llm_response(text,
-            prompt_tokens=resp.usage.prompt_tokens if resp.usage else None,
-            completion_tokens=resp.usage.completion_tokens if resp.usage else None)
+        pt, ct = extract_usage_tokens(resp)
+        update_llm_response(text, prompt_tokens=pt, completion_tokens=ct)
 
         # Извлекаем бинарные значения из ответа
         # Убираем все пробелы и нецифровые символы, оставляем только 0 и 1
