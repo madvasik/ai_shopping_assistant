@@ -52,12 +52,12 @@ def _format_markdown_report(
     lines = [
         f"# {title}",
         "",
-        f"- Started at: `{started_at}`",
-        f"- Total scenarios: `{len(cases)}`",
-        f"- Total LLM calls: `{total_llm_calls}`",
-        f"- Total cost: `${total_cost_usd:.6f}`",
+        f"- Старт: `{started_at}`",
+        f"- Сценариев: `{len(cases)}`",
+        f"- Вызовов LLM: `{total_llm_calls}`",
+        f"- Стоимость: `${total_cost_usd:.6f}`",
         "",
-        "## Scenarios",
+        "## Сценарии",
         "",
     ]
 
@@ -66,10 +66,10 @@ def _format_markdown_report(
             [
                 f"### {idx}. {case['title']}",
                 "",
-                f"- Flow: `{case['flow']}`",
-                f"- LLM calls: `{len(case['llm_calls'])}`",
+                f"- Режим: `{case['flow']}`",
+                f"- Вызовов LLM: `{len(case['llm_calls'])}`",
                 "",
-                "#### Dialogue",
+                "#### Диалог",
                 "",
             ]
         )
@@ -77,11 +77,11 @@ def _format_markdown_report(
         for step_idx, step in enumerate(case["steps"], start=1):
             lines.extend(
                 [
-                    f"##### Step {step_idx}. {step['label']}",
+                    f"##### Шаг {step_idx}. {step['label']}",
                     "",
-                    f"**User message**: `{step['message']}`",
+                    f"**Сообщение пользователя**: `{step['message']}`",
                     "",
-                    "**Assistant reply**:",
+                    "**Ответ ассистента**:",
                     "",
                     "```text",
                     _clean_reply_for_report(step["reply"]),
@@ -90,19 +90,19 @@ def _format_markdown_report(
                 ]
             )
 
-        lines.extend(["#### LLM Calls", ""])
+        lines.extend(["#### Вызовы LLM", ""])
 
         if not case["llm_calls"]:
-            lines.append("_No LLM calls logged._")
+            lines.append("_Вызовы LLM не залогированы._")
             lines.append("")
             continue
 
         for call_idx, call in enumerate(case["llm_calls"], start=1):
             lines.extend(
                 [
-                    f"- Call {call_idx}: `{call.get('function', '')}` / `{call.get('prompt_name', '')}` / "
-                    f"duration `{call.get('duration', '')}` / prompt `{call.get('prompt_tokens')}` / "
-                    f"completion `{call.get('completion_tokens')}` / cost `${call.get('cost_usd')}`",
+                    f"- Вызов {call_idx}: `{call.get('function', '')}` / `{call.get('prompt_name', '')}` / "
+                    f"длительность `{call.get('duration', '')}` / токены запроса `{call.get('prompt_tokens')}` / "
+                    f"токены ответа `{call.get('completion_tokens')}` / стоимость `${call.get('cost_usd')}`",
                 ]
             )
         lines.append("")
@@ -113,7 +113,7 @@ def _format_markdown_report(
 def _write_report(report_path: Path, *, started_at: str, cases: list[dict]):
     report_path.write_text(
         _format_markdown_report(
-            title="E2E Chat Flow Report",
+            title="E2E: отчёт по сценариям чата",
             started_at=started_at,
             cases=cases,
         ),
@@ -158,7 +158,7 @@ def _assert_successful_reply(reply: str) -> None:
 @pytest.fixture
 def require_openai_key():
     if not os.getenv("OPENAI_API_KEY"):
-        pytest.skip("OPENAI_API_KEY is required for e2e tests")
+        pytest.skip("Для e2e нужен OPENAI_API_KEY в окружении")
 
 
 @pytest.fixture(scope="session")
@@ -231,7 +231,7 @@ def test_e2e_consultation_flow(require_openai_key, isolated_chat_api, e2e_report
     result = _call_chat_with_retries(message)
     steps.append(
         {
-            "label": "Consultation flow",
+            "label": "Консультация",
             "message": message,
             "reply": result["reply"],
         }
@@ -251,7 +251,7 @@ def test_e2e_task_flow_without_clarification(require_openai_key, isolated_chat_a
     result = _call_chat_with_retries(message)
     steps.append(
         {
-            "label": "Task flow without clarification",
+            "label": "Задача без уточнения",
             "message": message,
             "reply": result["reply"],
         }
@@ -281,7 +281,7 @@ def test_e2e_task_flow_with_clarification_and_follow_up(
     first = _call_chat_with_retries(message)
     steps.append(
         {
-            "label": "Initial task request",
+            "label": "Первый запрос по задаче",
             "message": message,
             "reply": first["reply"],
         }
@@ -297,7 +297,7 @@ def test_e2e_task_flow_with_clarification_and_follow_up(
         second = _call_chat_with_retries(follow_up, history)
         steps.append(
             {
-                "label": "Follow-up answer",
+                "label": "Ответ на уточнение",
                 "message": follow_up,
                 "reply": second["reply"],
             }
@@ -317,7 +317,7 @@ def test_e2e_offtopic_flow(require_openai_key, isolated_chat_api, e2e_report, me
     result = _call_chat_with_retries(message)
     steps.append(
         {
-            "label": "Off-topic flow",
+            "label": "Вне тематики",
             "message": message,
             "reply": result["reply"],
         }

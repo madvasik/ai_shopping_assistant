@@ -3,24 +3,23 @@ from pathlib import Path
 import streamlit as st
 from dotenv import load_dotenv
 
-# Добавляем корневую директорию проекта в путь для импортов
+# Импорт src.services: корень пакета — каталог back/
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.services.llm_counter import set_llm_counter_callback, set_llm_response_callback
 from src.services import logs_db
 
-# Загружаем .env из корня проекта (на 2 уровня выше от текущего файла)
+# .env в корне репозитория (на четыре уровня выше этого файла).
 env_path = Path(__file__).parent.parent.parent.parent / ".env"
 load_dotenv(env_path)
 
 st.set_page_config(page_title="LLM Logs Panel", page_icon="📊", layout="wide")
 
-# Загрузка CSS стилей
+# Стили панели из assets/style.css при наличии файла.
 css_path = Path(__file__).parent / "assets" / "style.css"
 if css_path.exists():
     st.markdown('<style>' + css_path.read_text(encoding='utf-8') + '</style>', unsafe_allow_html=True)
 
-# Добавляем версию в левый верхний угол основного контента (fixed)
 st.markdown("""
     <style>
         .version-badge-fixed {
@@ -46,11 +45,9 @@ st.markdown("""
                 border-color: rgba(255, 255, 255, 0.4) !important;
             }
         }
-        /* Убеждаемся, что версия видна поверх всех элементов Streamlit */
         header[data-testid="stHeader"] {
             z-index: 999998 !important;
         }
-        /* Убираем отступы у main блока, чтобы версия была видна */
         .main .block-container {
             padding-top: 50px !important;
         }
@@ -58,8 +55,7 @@ st.markdown("""
     <div class="version-badge-fixed">version 30.03.2026</div>
 """, unsafe_allow_html=True)
 
-
-# Заглушки — логирование происходит в widget/app/chat_api.py
+# В процессе Streamlit логи пишет виджет (chat_api); здесь отключаем двойной учёт.
 def _noop_counter(function_name="Unknown", prompt_preview=None, prompt_name=None):
     pass
 
@@ -69,14 +65,10 @@ def _noop_response(response_preview=None, prompt_tokens=None, completion_tokens=
 set_llm_counter_callback(_noop_counter)
 set_llm_response_callback(_noop_response)
 
-# ──────────────────────────────────────────────
-# Основной контент — панель логов
-# ──────────────────────────────────────────────
 st.title("📊 Панель логов LLM")
 
 stats = logs_db.get_stats()
 
-# Статистика вверху
 st.subheader("📈 Общая статистика")
 col1, col2, col3, col4 = st.columns(4)
 with col1:
@@ -96,7 +88,6 @@ with col4:
 
 st.divider()
 
-# --- Сетевые ошибки ---
 network_errors = logs_db.get_network_errors(limit=10)
 if network_errors:
     st.subheader("🔴 Сетевые ошибки AI API")
@@ -111,14 +102,12 @@ if network_errors:
         st.error(f"{dt} — {err_type}")
     st.divider()
 
-# Кнопка очистки логов
 if st.button("🗑️ Очистить логи", type="secondary"):
     logs_db.clear_logs()
     st.rerun()
 
 st.divider()
 
-# Отображаем список запросов пользователя
 all_user_requests = logs_db.get_all_user_requests()
 
 if all_user_requests:
@@ -127,13 +116,11 @@ if all_user_requests:
         if not llm_requests:
             continue
 
-        # Подсчитываем статистику для этого запроса
         total = len(llm_requests)
         req_cost = sum(r.get("cost_usd") or 0 for r in llm_requests)
         req_tokens = sum((r.get("prompt_tokens") or 0) + (r.get("completion_tokens") or 0) for r in llm_requests)
         req_has_usage = any(r.get("prompt_tokens") is not None for r in llm_requests)
 
-        # Форматируем время запроса
         timestamp = user_req.get("timestamp", time.time())
         time_str = time.strftime("%H:%M:%S", time.localtime(timestamp))
 
@@ -141,21 +128,17 @@ if all_user_requests:
         tokens_str = f"{req_tokens:,} токенов" if req_has_usage else ""
         meta = " | ".join(filter(None, [f"LLM: {total}", tokens_str, cost_str, time_str]))
 
-        # Создаем expander для каждого запроса пользователя
         with st.expander(
             f"💬 {user_req.get('user_message', 'Неизвестный запрос')} | {meta}",
             expanded=False
         ):
-            # Статистика для этого запроса пользователя
             sc1, sc2, sc3 = st.columns(3)
             sc1.metric("Вызовов LLM", total)
             sc2.metric("Токенов", f"{req_tokens:,}" if req_has_usage else "—")
             sc3.metric("Стоимость", f"${req_cost:.4f}" if req_has_usage else "—")
             st.divider()
 
-            # Отображаем каждый вызов LLM
             for llm_req in llm_requests:
-                # Формируем строку с длительностью
                 if llm_req.get('duration'):
                     duration_display = llm_req['duration']
                     status_badge = "✅"
@@ -220,7 +203,7 @@ if all_user_requests:
 else:
     st.info("📋 Запросы к LLM будут отображаться здесь. Запросы приходят из виджета чата.")
 
-# Автообновление каждые 2 секунды
+# Периодическое обновление страницы, чтобы видеть новые записи из SQLite.
 if "last_refresh" not in st.session_state:
     st.session_state.last_refresh = time.time()
 

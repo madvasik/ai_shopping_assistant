@@ -1,5 +1,0 @@
-# Локальная разработка и pytest (не используется в Docker-образе по умолчанию).
--r requirements.txt
-pytest>=8.0
-pytest-cov>=5.0
-vulture>=2.11

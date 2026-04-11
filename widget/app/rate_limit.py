@@ -5,8 +5,8 @@ from typing import Deque, Dict, Tuple
 
 class InMemoryRateLimiter:
     """
-    Simple in-memory sliding-window rate limiter.
-    Not suitable for multi-instance deployments (no shared state).
+    Ограничитель частоты в памяти (скользящее окно).
+    Не подходит для нескольких инстансов без общего состояния.
     """
 
     def __init__(self, max_requests: int = 30, window_seconds: int = 300):
@@ -15,9 +15,7 @@ class InMemoryRateLimiter:
         self._hits: Dict[str, Deque[float]] = defaultdict(deque)
 
     def allow(self, key: str) -> Tuple[bool, int]:
-        """
-        Returns (allowed, retry_after_seconds).
-        """
+        """Возвращает (разрешено, секунд до следующей попытки при отказе)."""
         now = time.time()
         q = self._hits[key]
 

@@ -193,7 +193,7 @@ def should_ask_clarification(task_description: str, conversation_history: List[D
     """
     client, err = _get_openai_client()
     if err or client is None:
-        # Fallback: если LLM недоступен, не задаем вопросы
+        # Если LLM недоступен — без уточняющих вопросов.
         return None
     
     # Формируем историю диалога для контекста

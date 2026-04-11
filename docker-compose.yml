@@ -7,17 +7,17 @@ services:
       dockerfile: Dockerfile
     container_name: ai_shopping_assistant
     ports:
-      - "8501:8501"  # Streamlit
-      - "8001:8001"  # Widget
+      - "8501:8501"  # панель Streamlit (логи LLM)
+      - "8001:8001"  # HTTP виджета и демо
     env_file:
       - .env
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      # Путь к SQLite логов внутри смонтированного каталога (bind одного файла на хосте без файла даёт каталог и ломает SQLite).
+      - LOGS_DB_PATH=/app/logs_data/logs.db
     volumes:
-      # Монтируем код для разработки (изменения применяются без пересборки)
       - ./back:/app/back
       - ./widget:/app/widget
-      # Опционально: монтируем данные, если хотите обновлять их без пересборки
-      - ./back/database:/app/back/database:ro
-      - ./logs.db:/app/logs.db
+      - ./back/database:/app/back/database:ro  # каталог товаров (только чтение)
+      - ./logs_data:/app/logs_data
     restart: unless-stopped

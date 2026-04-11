@@ -1,1 +1,1 @@
-# Unit tests (локальный запуск: pytest из каталога project/)
+# Тесты pytest (запуск из корня репозитория: pytest)

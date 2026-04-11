@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-# По умолчанию /app/logs.db (Docker) или рядом с back/
+# LOGS_DB_PATH в env; иначе в Docker /app/logs.db, локально — logs.db в корне репозитория.
 _DEFAULT_DB_PATH = Path(os.getenv(
     "LOGS_DB_PATH",
     "/app/logs.db" if Path("/app").exists() else str(Path(__file__).resolve().parents[3] / "logs.db"),
@@ -28,13 +28,15 @@ _local = threading.local()
 MAX_USER_REQUESTS = 50
 MAX_NETWORK_ERRORS = 100
 
-# ------------------------------------------------------------------
-# Подключение
-# ------------------------------------------------------------------
 
 def _get_conn(db_path: Path | None = None) -> sqlite3.Connection:
     """Возвращает (thread-local) соединение, создаёт БД при первом вызове."""
-    path = str(db_path or _DEFAULT_DB_PATH)
+    raw = db_path or _DEFAULT_DB_PATH
+    p = Path(raw)
+    # Создаём родительский каталог (например logs_data/), иначе SQLite не откроет файл.
+    if p.parent != Path("."):
+        p.parent.mkdir(parents=True, exist_ok=True)
+    path = str(p.resolve())
     conn: sqlite3.Connection | None = getattr(_local, "conn", None)
     conn_path: str | None = getattr(_local, "conn_path", None)
     if conn is not None and conn_path == path:
@@ -95,10 +97,6 @@ def _ensure_column(conn: sqlite3.Connection, table_name: str, column_name: str, 
     conn.commit()
 
 
-# ------------------------------------------------------------------
-# user_requests
-# ------------------------------------------------------------------
-
 def add_user_request(user_message: str, timestamp: float | None = None) -> int:
     """Создаёт новую группу и возвращает её id."""
     conn = _get_conn()
@@ -131,10 +129,6 @@ def _trim_user_requests(conn: sqlite3.Connection) -> None:
     """)
     conn.commit()
 
-
-# ------------------------------------------------------------------
-# llm_calls
-# ------------------------------------------------------------------
 
 def add_llm_call(
     user_request_id: int,
@@ -169,7 +163,6 @@ def update_llm_response(
 ) -> None:
     """Обновляет первую незавершённую (duration IS NULL) запись в группе."""
     conn = _get_conn()
-    # FIFO: ищем первый llm_call без duration
     row = conn.execute(
         """SELECT id, start_time FROM llm_calls
            WHERE user_request_id = ? AND duration IS NULL
@@ -178,7 +171,7 @@ def update_llm_response(
     ).fetchone()
 
     if row is None:
-        # Fallback: последний вызов в группе
+        # Нет открытой записи — обновляем последний вызов в группе.
         row = conn.execute(
             "SELECT id, start_time FROM llm_calls WHERE user_request_id = ? ORDER BY id DESC LIMIT 1",
             (user_request_id,),
@@ -190,7 +183,7 @@ def update_llm_response(
     call_id = row["id"]
     start = row["start_time"]
 
-    # Вычисляем duration
+    # Длительность по разнице времени, если не передали явно.
     if duration is None and start:
         elapsed = time.time() - start
         if elapsed < 1:
@@ -215,10 +208,6 @@ def update_llm_response(
     conn.commit()
 
 
-# ------------------------------------------------------------------
-# network_errors
-# ------------------------------------------------------------------
-
 def add_network_error(error_type: str) -> None:
     conn = _get_conn()
     conn.execute(
@@ -226,7 +215,6 @@ def add_network_error(error_type: str) -> None:
         (time.time(), error_type),
     )
     conn.commit()
-    # Тримим
     conn.execute(f"""
         DELETE FROM network_errors
         WHERE id NOT IN (
@@ -243,10 +231,6 @@ def get_network_errors(limit: int = 10) -> List[Dict[str, Any]]:
     ).fetchall()
     return [dict(r) for r in rows]
 
-
-# ------------------------------------------------------------------
-# Чтение / агрегация (для Streamlit-панели)
-# ------------------------------------------------------------------
 
 def get_stats() -> Dict[str, Any]:
     """Возвращает агрегированную статистику."""
@@ -293,10 +277,6 @@ def get_all_user_requests() -> List[Dict[str, Any]]:
         result.append(ur_dict)
     return result
 
-
-# ------------------------------------------------------------------
-# Очистка
-# ------------------------------------------------------------------
 
 def clear_logs() -> None:
     conn = _get_conn()

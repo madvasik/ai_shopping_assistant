@@ -17,7 +17,6 @@ from pydantic import BaseModel, Field
 
 from .rate_limit import InMemoryRateLimiter
 
-# Load .env if present
 load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
@@ -35,10 +34,10 @@ UPSTREAM_CHAT_URL = os.getenv("UPSTREAM_CHAT_URL", "").strip()
 UPSTREAM_AUTH_HEADER_NAME = os.getenv("UPSTREAM_AUTH_HEADER_NAME", "").strip()
 UPSTREAM_AUTH_HEADER_VALUE = os.getenv("UPSTREAM_AUTH_HEADER_VALUE", "").strip()
 
-# Rate limit: 30 requests per 5 minutes
+# Ограничение частоты: 30 запросов за 5 минут на ключ (сессия или IP).
 rate_limiter = InMemoryRateLimiter(max_requests=30, window_seconds=300)
 
-# In-memory session store: session_id -> {widget_key, page_host, created_at, messages}
+# Сессии в памяти: session_id → виджет, хост страницы, история сообщений.
 SESSIONS: Dict[str, Dict[str, Any]] = {}
 
 
@@ -49,7 +48,7 @@ def _load_tenants() -> Dict[str, Dict[str, Any]]:
         data = json.load(f)
     if not isinstance(data, dict):
         raise RuntimeError("tenants.json must be an object keyed by widget_key")
-    # Normalize
+    # Нормализация: только dict-значения и список allow_domains в нижнем регистре.
     out: Dict[str, Dict[str, Any]] = {}
     for k, v in data.items():
         if not isinstance(v, dict):
@@ -91,10 +90,7 @@ def _host_allowed(host: Optional[str], allowed_domains: list) -> bool:
 
 
 def _extract_embed_host_from_headers(request: Request) -> Optional[str]:
-    """
-    Tries to get embedding page host from Origin/Referer headers.
-    For /chat and /loader.js the Referer is typically the embedding page.
-    """
+    """Хост страницы встраивания из Origin или Referer (/chat, /loader.js)."""
     origin = request.headers.get("origin") or ""
     referer = request.headers.get("referer") or ""
 
@@ -130,12 +126,9 @@ def _enforce_embed_allowed(widget_key: str, embed_host: Optional[str]) -> None:
 
 
 def _enforce_any_tenant_allows(embed_host: Optional[str]) -> None:
-    """
-    For /loader.js we don't know widget_key, so we allow if embed_host matches ANY tenant.
-    """
+    """Для /loader.js widget_key неизвестен — допускаем, если хост есть у любого тенанта."""
     if not embed_host:
-        # In practice script tag may omit referer in some contexts; allow in dev,
-        # but log a warning.
+        # У скрипта иногда нет Referer; разрешаем запрос, фиксируем предупреждение.
         logger.warning("No Origin/Referer for /loader.js request; allowing (best-effort).")
         return
 
@@ -153,7 +146,7 @@ def _rate_limit_key(request: Request, session_id: Optional[str]) -> str:
 
 
 def _normalize_upstream_response(data: Any) -> Dict[str, Any]:
-    # UI expects at least {"reply": "..."}.
+    # Виджету нужен ключ reply; остальные поля — как у внешнего API.
     if isinstance(data, dict):
         for k in ["reply", "response", "answer", "message", "text", "content"]:
             if k in data and data[k] is not None:
@@ -165,7 +158,7 @@ def _normalize_upstream_response(data: Any) -> Dict[str, Any]:
 
 
 async def _proxy_chat(payload: Dict[str, Any]) -> Dict[str, Any]:
-    # Если UPSTREAM_CHAT_URL не установлен, используем локальный API
+    # Локальная обработка через chat_api, если UPSTREAM_CHAT_URL не задан.
     if not UPSTREAM_CHAT_URL:
         try:
             from .chat_api import process_chat_request
@@ -173,35 +166,29 @@ async def _proxy_chat(payload: Dict[str, Any]) -> Dict[str, Any]:
             session_id = payload.get("session_id")
             message = payload.get("message", "")
 
-            # Получаем историю сообщений из сессии
             conversation_history = []
             if session_id and session_id in SESSIONS:
                 conversation_history = SESSIONS[session_id].get("messages", [])
 
-            # Обрабатываем запрос через локальный API
             result = process_chat_request(
                 message=message,
                 conversation_history=conversation_history,
             )
-            
-            # Обновляем историю сообщений в сессии
+
             if session_id and session_id in SESSIONS:
                 if "messages" not in SESSIONS[session_id]:
                     SESSIONS[session_id]["messages"] = []
-                
-                # Добавляем сообщение пользователя
+
                 SESSIONS[session_id]["messages"].append({
                     "role": "user",
                     "content": message
                 })
-                
-                # Добавляем ответ ассистента
+
                 SESSIONS[session_id]["messages"].append({
                     "role": "assistant",
                     "content": result.get("reply", "")
                 })
-                
-                # Ограничиваем размер истории (последние 20 сообщений)
+
                 if len(SESSIONS[session_id]["messages"]) > 20:
                     SESSIONS[session_id]["messages"] = SESSIONS[session_id]["messages"][-20:]
             
@@ -218,7 +205,6 @@ async def _proxy_chat(payload: Dict[str, Any]) -> Dict[str, Any]:
                 "error": str(e),
             }
 
-    # Используем внешний API, если UPSTREAM_CHAT_URL установлен
     headers: Dict[str, str] = {"content-type": "application/json"}
     if UPSTREAM_AUTH_HEADER_NAME and UPSTREAM_AUTH_HEADER_VALUE:
         headers[UPSTREAM_AUTH_HEADER_NAME] = UPSTREAM_AUTH_HEADER_VALUE
@@ -248,7 +234,7 @@ async def _proxy_chat(payload: Dict[str, Any]) -> Dict[str, Any]:
             },
         )
 
-    # Try JSON, fallback to text
+    # Ответ апстрима: JSON или сырой текст.
     try:
         data = resp.json()
         return _normalize_upstream_response(data)
@@ -260,12 +246,11 @@ async def _proxy_chat(payload: Dict[str, Any]) -> Dict[str, Any]:
 app = FastAPI(
     title="widget-service",
     version="1.0.0",
-    docs_url=None,  # Отключаем Swagger
-    redoc_url=None  # Отключаем ReDoc
+    docs_url=None,  # Swagger отключён
+    redoc_url=None,
 )
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
-# Монтируем examples для доступа к статическим файлам демо-страниц
 app.mount("/examples", StaticFiles(directory=str(EXAMPLES_DIR)), name="examples")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
@@ -288,7 +273,7 @@ class ChatIn(BaseModel):
 
 @app.get("/", include_in_schema=False)
 async def root():
-    """Главная страница - демо-сайт с виджетом"""
+    """Статическая демо-страница с виджетом."""
     demo_path = EXAMPLES_DIR / "demo" / "index.html"
     if not demo_path.exists():
         raise HTTPException(status_code=500, detail="examples/demo/index.html missing")
@@ -340,10 +325,7 @@ async def chat(request: Request, key: str = "demo"):
 
 @app.post("/api/session", response_model=SessionCreateOut, include_in_schema=False)
 async def create_session(request: Request, payload: SessionCreateIn):
-    """
-    Скрыт от Swagger - используется только виджетом для обратной совместимости.
-    Сессии создаются автоматически при первом запросе к /api/chat.
-    """
+    """Создание сессии (совместимость); при отсутствии сессии её может создать /api/chat."""
     widget_key = payload.widget_key
     tenant = _tenant_or_404(widget_key)
 
@@ -372,14 +354,14 @@ async def create_session(request: Request, payload: SessionCreateIn):
         "widget_key": widget_key,
         "page_host": page_host,
         "created_at": time.time(),
-        "messages": [],  # История сообщений для сессии
+        "messages": [],
     }
     logger.info(f"Session created: {session_id} for widget_key={widget_key}, page_host={page_host}")
     return SessionCreateOut(session_id=session_id)
 
 
 def _create_session_for_chat(request: Request, payload: ChatIn) -> Optional[str]:
-    """Создаёт сессию на лету при unknown_session (например, после перезапуска Docker)."""
+    """Создать сессию, если клиент прислал неизвестный session_id (например устаревший localStorage)."""
     logger.info(f"Auto-create attempt: widget_key={payload.widget_key}, context={payload.context}")
     widget_key = payload.widget_key or "demo"
     tenant = TENANTS.get(widget_key)
@@ -389,19 +371,17 @@ def _create_session_for_chat(request: Request, payload: ChatIn) -> Optional[str]
     ctx = payload.context or {}
     page_url = str(ctx.get("page_url") or "")
     page_host = _hostname_from_url(page_url) or _extract_embed_host_from_headers(request)
-    
-    # Если page_host не определен или это localhost/127.0.0.1, проверяем разрешение для localhost
+
     if not page_host or _is_local_dev_host(page_host):
         if (
             _host_allowed("localhost", tenant.get("allow_domains", []))
             or _host_allowed("127.0.0.1", tenant.get("allow_domains", []))
         ):
-            page_host = "localhost"  # Устанавливаем localhost для локальной разработки
+            page_host = "localhost"
         else:
             logger.warning(f"Auto-create session: no page_host and localhost not allowed for {widget_key}")
             return None
     else:
-        # Проверяем разрешение для определенного хоста
         if not _host_allowed(page_host, tenant.get("allow_domains", [])):
             logger.warning(f"Auto-create session: host {page_host} not allowed for {widget_key}, allowed: {tenant.get('allow_domains', [])}")
             return None
@@ -423,7 +403,7 @@ async def chat_proxy(request: Request, payload: ChatIn):
     sess = SESSIONS.get(payload.session_id)
     session_id = payload.session_id
     if not sess:
-        # Авто-создание сессии при unknown_session (например, устаревший sessionId из localStorage)
+        # Нет сессии (перезапуск сервера или старый id) — пробуем создать по widget_key и context.
         logger.info(f"Session {payload.session_id} not found, attempting auto-create with widget_key={payload.widget_key}, context={payload.context}")
         new_id = _create_session_for_chat(request, payload)
         if new_id:
@@ -465,13 +445,13 @@ async def chat_proxy(request: Request, payload: ChatIn):
                 raise HTTPException(status_code=403, detail={"error": "missing_context_page_url"})
 
     outgoing = payload.model_dump()
-    outgoing["session_id"] = session_id  # Может быть автосозданная сессия
+    outgoing["session_id"] = session_id
     outgoing["widget_key"] = widget_key
     outgoing.setdefault("context", {})
     outgoing["context"]["page_host"] = ctx_host or sess.get("page_host")
 
     result = await _proxy_chat(outgoing)
-    # Если сессия была автосоздана — возвращаем её в ответе, чтобы клиент обновил sessionId
+    # После автосоздания сессии отдаём новый session_id клиенту.
     if session_id != payload.session_id:
         result = dict(result)
         result["session_id"] = session_id

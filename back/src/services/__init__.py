@@ -1,1 +1,1 @@
-# Services package: import from submodules, e.g. `from src.services.intent_classifier import ...`
+# Пакет сервисов: импорт из подмодулей, например `from src.services.intent_classifier import ...`

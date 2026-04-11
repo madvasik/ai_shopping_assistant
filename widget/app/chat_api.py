@@ -13,13 +13,11 @@ from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
-# Добавляем путь к сервисам
-# widget/app/chat_api.py -> widget/ -> ai-commercial-chatbot/ -> back/
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 BACK_DIR = PROJECT_ROOT / "back"
+# Импорт пакета src из каталога back/
 sys.path.insert(0, str(BACK_DIR))
 
-# Глобальная переменная для корня проекта (используется в _get_data_path)
 _PROJECT_ROOT = PROJECT_ROOT
 
 from src.services.intent_classifier import (
@@ -38,26 +36,22 @@ from src.services.llm_counter import set_llm_counter_callback, set_llm_response_
 from src.services.network_utils import is_network_error, log_network_error, NETWORK_ERROR_REPLY
 from src.services import logs_db
 
-# Загружаем переменные окружения
 load_dotenv()
 
-# Глобальная переменная для отслеживания текущего запроса пользователя
 _current_user_message: Optional[str] = None
 _current_user_request_id: Optional[int] = None
 
-# Глобальные переменные для кэширования
 _retriever: Optional[Retriever] = None
 _kb: Optional[CatalogKB] = None
 _df: Optional[pd.DataFrame] = None
 
-# Конфигурация
 TOP_K_CANDIDATES = 60
 FINAL_K = 5
 MAX_CLARIFICATION_QUESTIONS = 2
 TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.4"))
 TOP_P = float(os.getenv("LLM_TOP_P", "0.95"))
 
-# Тарифы gpt-4o-mini ($ за токен)
+# Тарифы gpt-4o-mini ($ за токен) для оценки cost_usd в логах.
 _INPUT_PRICE_PER_TOKEN = 0.150 / 1_000_000
 _OUTPUT_PRICE_PER_TOKEN = 0.600 / 1_000_000
 
@@ -70,7 +64,6 @@ def _get_data_path() -> Path:
         if p.exists():
             return p
 
-    # Проверяем относительные пути от корня проекта
     sqlite_paths = [
         _PROJECT_ROOT / "back" / "database" / "products.db",
         _PROJECT_ROOT / "back" / "database" / "products.sqlite3",
@@ -98,17 +91,17 @@ def _increment_llm_counter(
     try:
         global _current_user_message, _current_user_request_id
 
-        # Извлекаем System и User промпты из полного промпта
         system_prompt = ""
         user_prompt = prompt_preview or "N/A"
 
+        # Разбор объединённого превью в system/user для таблицы логов.
         if "System:" in user_prompt and "User:" in user_prompt:
             parts = user_prompt.split("User:", 1)
             if len(parts) == 2:
                 system_prompt = parts[0].replace("System:", "").strip()
                 user_prompt = parts[1].strip()
 
-        # Находим или создаём группу
+        # Привязка вызова к группе user_requests (один пользовательский запрос).
         if _current_user_request_id is None and _current_user_message:
             found = logs_db.find_last_user_request_by_message(_current_user_message)
             if found:
@@ -158,15 +151,13 @@ def _update_llm_response(response_preview: str = None,
         pass
 
 
-# Устанавливаем callback функции для логирования при импорте модуля
 set_llm_counter_callback(_increment_llm_counter)
 set_llm_response_callback(_update_llm_response)
 
 def _init_services():
     """Инициализирует сервисы (Retriever и CatalogKB)"""
     global _retriever, _kb, _df
-    
-    # Устанавливаем callback функции для логирования (всегда)
+
     set_llm_counter_callback(_increment_llm_counter)
     set_llm_response_callback(_update_llm_response)
     
@@ -205,8 +196,7 @@ def _format_product_card(row: pd.Series) -> str:
     return f"• {title} — {price_str}"
 
 
-# Метка группы для парсера виджета: не попадает во вступление с markdown,
-# заголовок секции рисует только карусель (без дубля **Категория:**).
+# Префикс строки категории для фронта: карусель без дубля заголовка в markdown.
 _WIDGET_CATEGORY_PREFIX = "__WS_CAT__"
 
 
@@ -230,27 +220,22 @@ def _process_message(
         Текст ответа ассистента
     """
     global _current_user_message, _current_user_request_id
-    
-    # Устанавливаем текущее сообщение пользователя для группировки
+
     _current_user_message = message
-    
-    # Убеждаемся, что callback установлены перед обработкой
+
     set_llm_counter_callback(_increment_llm_counter)
     set_llm_response_callback(_update_llm_response)
-    
+
     _init_services()
-    
-    # Добавляем текущее сообщение в историю для обработки
+
     messages = conversation_history + [{"role": "user", "content": message}]
-    
-    # Проверяем, является ли это ответом на уточняющий вопрос
+
     is_follow_up_answer = False
     if len(messages) >= 2:
         prev_msg = messages[-2]
         if prev_msg.get("role") == "assistant" and "?" in prev_msg.get("content", ""):
             is_follow_up_answer = True
-    
-    # Если это ответ на уточняющий вопрос, формируем улучшенный запрос
+
     if is_follow_up_answer:
         user_messages = []
         assistant_questions = []
@@ -281,10 +266,8 @@ def _process_message(
         
         last_user = enhanced_query
     else:
-        # Это не ответ на уточняющий вопрос - сначала проверяем отношение к каталогу
         last_user = message
-        
-        # Проверяем отношение к каталогу ПЕРЕД классификацией интента
+
         catalog_related = is_catalog_related(last_user)
         
         if not catalog_related:
@@ -293,22 +276,16 @@ def _process_message(
                 "Я могу помочь с подбором товаров или ответить на вопросы о товарах из нашего каталога "
                 "строительного магазина (обои, краски, клей, инструменты для ремонта и т.д.)."
             )
-        
-        # Классифицируем интент только если вопрос относится к каталогу
+
         intent = classify_intent(messages, temperature=TEMPERATURE, top_p=TOP_P)
-        
-        # Ветвление в зависимости от интента
+
         if intent == "consultation":
-            # Консультационный flow
-            # Извлекаем упомянутые товары
             mentioned_product_names = extract_product_names_from_query(
                 last_user, temperature=TEMPERATURE, top_p=TOP_P
             )
-            
-            # Генерируем ответ через LLM
+
             llm_answer_text = _kb.answer_consultation(last_user)
-            
-            # Ищем товары по упомянутым названиям
+
             products_by_product = {}
             if mentioned_product_names:
                 for product_name in mentioned_product_names:
@@ -336,8 +313,7 @@ def _process_message(
                                 if filtered_products:
                                     filtered_df = pd.DataFrame(filtered_products)
                                     products_by_product[product_name] = filtered_df
-            
-            # Формируем ответ
+
             response_parts = [llm_answer_text]
             
             if products_by_product:
@@ -348,9 +324,7 @@ def _process_message(
                             response_parts.append(_format_product_card(r))
             
             return "\n".join(response_parts)
-    
-    # Problem solving flow
-    # Проверяем, нужно ли задать уточняющий вопрос
+
     clarification_count = sum(
         1
         for m in messages
@@ -363,8 +337,7 @@ def _process_message(
     
     if clarification_question:
         return clarification_question
-    
-    # Определяем необходимые товары для задачи
+
     required_products_result = get_required_products_for_task(last_user)
     
     if isinstance(required_products_result, dict):
@@ -375,8 +348,7 @@ def _process_message(
             required_products_result if isinstance(required_products_result, list) else []
         )
         required_products_text = ""
-    
-    # Проверяем, относится ли задача к строительным товарам
+
     if not required_products or len(required_products) == 0:
         test_search = _retriever.search(last_user, top_k=5)
         if test_search.empty or test_search["_bm25_score"].max() < 0.3:
@@ -386,8 +358,7 @@ def _process_message(
                 "Извините, произошла ошибка при определении необходимых товаров. "
                 "Пожалуйста, попробуйте переформулировать ваш запрос более конкретно."
             )
-    
-    # Ищем товары по каждому названию
+
     products_by_name = {}
     for product_info in required_products:
         if isinstance(product_info, dict):
@@ -407,8 +378,7 @@ def _process_message(
             
             if not relevant_results.empty:
                 products_by_name[product_name] = relevant_results.head(3)
-    
-    # Формируем ответ
+
     response_parts = []
     
     if required_products_text and required_products_text.strip():
@@ -430,9 +400,7 @@ def _process_message(
                 + "\n".join(product_list_items)
             )
             response_parts.append(list_text)
-    
-    # Показываем найденные товары
-    # Сначала фильтруем товары по релевантности
+
     filtered_products_by_name = {}
     if products_by_name:
         for product_name, product_results in products_by_name.items():
@@ -457,9 +425,8 @@ def _process_message(
             response_parts.append(_widget_category_line(product_name))
             for r in filtered_products:
                 response_parts.append(_format_product_card(pd.Series(r)))
-    
+
     if not response_parts:
-        # Fallback: обычный поиск
         cands = _retriever.search(last_user, top_k=TOP_K_CANDIDATES)
         
         if not cands.empty and "_bm25_score" in cands.columns:
@@ -502,30 +469,27 @@ def process_chat_request(
     global _current_user_message, _current_user_request_id
     
     try:
-        # Проверяем, является ли это ответом на уточняющий вопрос
+        # Ответ на уточняющий вопрос ассистента — продолжаем ту же группу в логах SQLite.
         is_follow_up = False
         if conversation_history:
             for msg in reversed(conversation_history[-3:]):
                 if msg.get("role") == "assistant" and "?" in msg.get("content", ""):
                     is_follow_up = True
                     break
-        
-        # Устанавливаем текущее сообщение пользователя для группировки
+
         _current_user_message = message
 
-        # Если это ответ на уточняющий вопрос, используем ID последней группы
         if is_follow_up:
             all_urs = logs_db.get_all_user_requests()
             if all_urs:
-                last_ur = all_urs[0]  # новые первыми
+                last_ur = all_urs[0]  # get_all_user_requests: новые записи первыми
                 _current_user_request_id = last_ur["id"]
                 _current_user_message = last_ur.get("user_message", message)
             else:
                 _current_user_request_id = None
         else:
             _current_user_request_id = None
-        
-        # Убеждаемся, что callback установлены при каждом запросе
+
         set_llm_counter_callback(_increment_llm_counter)
         set_llm_response_callback(_update_llm_response)
         
@@ -533,8 +497,7 @@ def process_chat_request(
             conversation_history = []
         
         reply = _process_message(message, conversation_history)
-        
-        # Сбрасываем текущее сообщение после обработки
+
         _current_user_message = None
         _current_user_request_id = None
 
@@ -550,9 +513,9 @@ def process_chat_request(
         return {"reply": f"Ошибка при обработке сообщения: {str(e)}"}
 
 
-# Устанавливаем callback функции для логирования в конце файла после определения всех функций
+# Повторная привязка после полной загрузки модуля (на случай порядка импортов).
 try:
     set_llm_counter_callback(_increment_llm_counter)
     set_llm_response_callback(_update_llm_response)
-except Exception as e:
-    pass  # Ошибки инициализации не критичны для работы виджета
+except Exception:
+    pass

@@ -14,14 +14,14 @@ widget/.venv/
 dist/
 build/
 
-# Coverage (pytest-cov / coverage.py)
+# Покрытие кода (pytest-cov)
 .coverage
 .coverage.*
 htmlcov/
 coverage.xml
 *.cover
 
-# Environment variables
+# Секреты и локальные env
 .env
 .env.local
 .env.*.local
@@ -33,23 +33,26 @@ coverage.xml
 *.swo
 *~
 
-# OS
+# ОС
 .DS_Store
 Thumbs.db
 
 # Streamlit
 .streamlit/
 
-# Data (опционально, раскомментируйте если не хотите коммитить SQLite базу)
+# Раскомментируйте, если не хотите коммитить SQLite с товарами:
 # database/*.db
 
-# Logs
+# Логи и локальные БД
 *.log
 logs.db
+logs_data/
 
-# Combined sources (may contain secrets)
+# Сборки с чувствительными данными
 combined_sources.txt
 **/combined_sources.txt
 
-# Local planning notes
 TODO.md
+
+# Отчёты e2e (генерируются pytest)
+tests/e2e/reports/report_*.md
